@@ -1,0 +1,6 @@
+# The Alexa top list
+alexa_list: "data/alexa-1m-2020-12-17.csv.gz"
+# Versions of QUIC supported in our experiments
+supported_versions: ["h3-29"]
+# Second level domains that whose representation in the dataset are reduced
+clamp_sld_domains: []
