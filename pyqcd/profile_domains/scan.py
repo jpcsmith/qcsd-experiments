@@ -162,7 +162,9 @@ def main(
     duration = time.perf_counter() - start_time
 
     data.merge(pd.DataFrame(result), left_on="domain", right_on="domain",
-               how="left").to_csv(outfile, header=True, index=False)
+               how="left").to_csv(
+                   outfile, header=True, index=False, errors="backslashreplace"
+               )
 
     _LOGGER.info("Profiling complete in %s (%.2fs)",
                  timedelta(seconds=duration), duration)
