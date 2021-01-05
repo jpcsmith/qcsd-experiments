@@ -134,7 +134,8 @@ async def run_profiling(domains: Sequence[str], n_outstanding: int,
         # Specifying the family is necessary to avoid network unreachable errs
         async with aiohttp.TCPConnector(
             resolver=resolver, limit=n_outstanding, use_dns_cache=True,
-            ttl_dns_cache=(60 * 5), family=socket.AF_INET
+            ttl_dns_cache=(60 * 5), family=socket.AF_INET, force_close=True,
+            enable_cleanup_closed=True
         ) as connector:
             return await asyncio.gather(
                 *[profile_domain(d, connector, semaphore, timeout)
