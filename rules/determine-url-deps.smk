@@ -37,7 +37,7 @@ rule depfetch_split:
         num_output=lambda _: len(scatter.depfetch("{scatteritem}"))
     shell: """\
         split --suffix-length=2 -d --number=l/{params.num_output} \
-            {input} 'results/determine-url-deps/filter-domains.d/'
+            {input} 'results/determine-url-deps/urls.txt.d/'
         """
 
 
