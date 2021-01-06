@@ -1,11 +1,10 @@
-"""Usage: script [options] DOMAIN_FILE [OUTFILE]
+"""Usage: script [options] DOMAIN_FILE OUTFILE
 
 Profile the list of domain names provided in DOMAIN_FILE, one per line.
 The script documents the final HTTP url that is fetched, the alt-svc
 fields in the header specifying other services running, as well as the
 respone code of the request.  The results are written in CSV format to
-OUTFILE.  OUTFILE defaults to standard input if not present.
-
+OUTFILE.
 
 Options:
     --max-outstanding n
@@ -173,7 +172,7 @@ def main(
 if __name__ == '__main__':
     main(**doceasy.doceasy(__doc__, {
         'DOMAIN_FILE': str,
-        'OUTFILE': doceasy.File(mode='w', default='-'),
+        'OUTFILE': str,
         '--max-outstanding': And(Use(int), AtLeast(1)),
         '--timeout': And(Use(float), AtLeast(0.0)),
     }))
