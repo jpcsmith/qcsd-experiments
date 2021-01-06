@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+"""Usage: fetch-script [options] [URLFILE] [OUTFILE]
+
+Load each URL once with TCP and record the logs from the browser.
+
+URLFILE is a text file with one URL per line.  If not provided or '-',
+the URLs are read from stdin.  The results are written as JSON stream
+to OUTFILE (defaults to stdout).
+
+Options:
+    --delay n
+        Wait n seconds between each request for the same URL
+        [default: 15.0].
+
+    --max-attempts n
+        Stop trying to collect a URL after n sequential failures
+        [default: 3].
+
+    --driver-path path
+        Use Chromedriver binary at path [default: chromedriver].
+"""
+import asyncio
+import logging
+
+import doceasy
+from doceasy import Use
+from lab import fetch_websites
+from lab.fetch_websites import ProtocolSampler, ChromiumSessionFactory
+from lab.sniffer import TCPDumpPacketSniffer
+
+LOGGER = logging.getLogger("dep-fetch")
+
+
+async def main(
+    urlfile, outfile, delay: float, driver_path: str, max_attempts: int,
+):
+    """Load each URL once with TCP and record the logs from the browser.
+    """
+    logging.basicConfig(
+        format='[%(asctime)s] %(name)s - %(levelname)s - %(message)s',
+        level=logging.INFO)
+    LOGGER.info("Running dependency collection with arguments: %s", locals())
+
+    urls = [url for (url, ) in urlfile]
+    if not urls:
+        raise ValueError("No URLs provided to fetch.")
+
+    sampler = ProtocolSampler(
+        sniffer=TCPDumpPacketSniffer(snaplen=96),
+        session_factory=ChromiumSessionFactory(driver_path=driver_path),
+        delay=delay, max_attempts=max_attempts)
+
+    async for result in sampler.sample_multiple((urls, {"tcp": 1})):
+        result["page_source"] = None
+        result["packets"] = None
+
+        outfile.write(fetch_websites.encode_result(result))
+        outfile.write("\n")
+        outfile.flush()
+
+    LOGGER.info("Dependency collection complete.")
+
+
+if __name__ == '__main__':
+    asyncio.run(
+        main(**doceasy.doceasy(__doc__, {
+            "URLFILE": doceasy.CsvFile(mode='r', default='-'),
+            "OUTFILE": doceasy.File(mode='w', default='-'),
+            "--driver-path": str,
+            "--delay": Use(float),
+            "--max-attempts": Use(int),
+        }))
+    )
