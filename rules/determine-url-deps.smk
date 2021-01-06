@@ -34,9 +34,9 @@ rule depfetch_split:
     output:
         scatter.depfetch("results/determine-url-deps/urls.txt.d/{scatteritem:02d}.txt")
     params:
-        num_output=lambda _: len(scatter.depfetch("{scatteritem}"))
+        n_splits=lambda _: len(scatter.depfetch("{scatteritem}"))
     shell: """\
-        split --suffix-length=2 -d --number=l/{params.num_output} \
+        split --suffix-length=2 -d --additional-suffix=.txt --number=l/{params.n_splits} \
             {input} 'results/determine-url-deps/urls.txt.d/'
         """
 
