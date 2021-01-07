@@ -24,6 +24,27 @@ DEFAULT_NETLOC = {
     "weather": "weather.neqo-test.com:7443",
 }
 
+@contextmanager
+def capture(
+    conn,
+    out_pcap: str,
+    interface: Optional[str] = "lo" if platform=="linux" else "lo0",
+    filter_: str = "port 7443"
+):
+    """Create a context manager for capturing a trace with tshark.
+    """
+    iface_flag = ("" if platform=="linux" else f"-i en2") if interface is None else f"-i {interface}"
+    promise = conn.run(
+        f"tshark {iface_flag} -f '{filter_}' -w '{out_pcap}'",
+        asynchronous=True, echo=True)
+    time.sleep(3)
+
+    try:
+        yield promise
+    finally:
+        os.kill(promise.runner.process.pid, signal.SIGTERM)
+        promise.join()
+
 
 def _load_urls(name: str, netloc: str, local: bool):
     netloc = netloc or (LOCAL_NETLOC if local else DEFAULT_NETLOC[name])
