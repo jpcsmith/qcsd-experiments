@@ -70,4 +70,7 @@ rule url_dependencies__csv:
         prefix=directory("results/determine-url-deps/dependencies")
     log:
         "results/determine-url-deps/dependencies.log"
-    shell: "python3 -m pyqcd.url_dependency_graph {input} '{output.prefix}/' 2> {log}"
+    shell: """\
+        mkdir -p {output} \
+        && python3 -m pyqcd.url_dependency_graph {input} '{output.prefix}/' 2> {log}
+        """
