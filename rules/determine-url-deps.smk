@@ -69,5 +69,5 @@ rule url_dependencies__csv:
     output:
         prefix=directory("results/determine-url-deps/dependencies")
     log:
-        "results/determine-url-deps/dependencies/url_dependencies.log"
+        "results/determine-url-deps/dependencies.log"
     shell: "python3 -m pyqcd.url_dependency_graph {input} '{output.prefix}/' 2> {log}"
