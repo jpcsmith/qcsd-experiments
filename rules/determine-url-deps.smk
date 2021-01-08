@@ -60,3 +60,14 @@ rule url_dependencies:
     output:
         protected("results/determine-url-deps/browser-logs.json.gz")
     shell: "cat {input} | gzip --to-stdout > {output}"
+
+
+rule url_dependencies__csv:
+    """Extract the dependency CSVs from the browser results."""
+    input:
+        rules.url_dependencies.output
+    output:
+        prefix=directory("results/determine-url-deps/dependencies")
+    log:
+        "results/determine-url-deps/dependencies/url_dependencies.log"
+    shell: "python3 -m pyqcd.url_dependency_graph {input} '{output.prefix}/' 2> {log}"
