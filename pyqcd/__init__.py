@@ -14,5 +14,5 @@ def init_logging(verbosity: int = 1):
     }[verbosity]
 
     logging.basicConfig(
-        format='[%(asctime)s] %(name)s - %(levelname)s - %(message)s',
+        format='[%(asctime)s] %(name)s [%(levelname)s] %(message)s',
         level=log_level)

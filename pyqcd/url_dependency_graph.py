@@ -1,19 +1,38 @@
+"""Usage: module [-v] [INFILE [PREFIX]]
+
+Filter browser URL request logs and extract dependency graphs.
+
+INFILE is a gzipped json stream containing the browser fetch results,
+one per line.  PREFIX is the prefix to append to the filename of each
+of the output dependency graphs and defaults to 'x'.  Each graph is a
+CSV adjancency list of the pairs (dependency URL, URL), and are written
+to the files PREFIX000.csv, PREFIX001.csv ...
+
+Options:
+    -v, --verbose   Output more log messages.
+"""
 import json
 import gzip
 import logging
-from typing import Set, Tuple, Optional, Dict
+import urllib.parse
+from collections import Counter
+from typing import Set, Tuple, Optional, Dict, Iterator
+from itertools import chain
 
+import doceasy
 import pandas as pd
 
 import pyqcd
 
+#: The minimum number of URLs in each dependency graph
+N_MININMUM_URLS = 5
 
 _LOGGER = logging.getLogger("url-dep-graph")
 
 
 def is_target(node, edges) -> bool:
     """Return true iff the node is a target in the graph."""
-    for (src, target) in edges:
+    for (_, target) in edges:
         if node == target:
             return True
     return False
@@ -47,42 +66,43 @@ def _extract_edges(log_message, edges):
         edges.add((None, request["url"]))
 
 
-def _same_domain(edge: Tuple[Optional[str], str], base_url: str) -> bool:
-    """Return true iff the target and dependency URLs are on the same
-    domain as the base_url or the target is and there is no dependency.
-    """
-    dependency, target = edge
-
-    if not target.startswith(base_url):
-        _LOGGER.debug("Dropping edge %r for url %r due to target at a "
-                      "different domain.", edge, base_url)
-        return False
-
-    if not (dependency is None or dependency.startswith(base_url)):
-        _LOGGER.debug("Dropping edge %r for url %r due to a dependency from a "
-                      "different domain.", edge, base_url)
-        return False
-    return True
-
-
 def _extract_connection(log_message, connections):
     if log_message["method"] != "Network.responseReceived":
         return
 
     response = log_message["params"]["response"]
     urls_on_conn = connections.setdefault(response["connectionId"], set())
-
-    assert response["url"] not in urls_on_conn
     urls_on_conn.add(response["url"])
 
 
-def to_adjacency_list(fetch_output) -> Set[Tuple[Optional[str], str]]:
+def is_valid_edge(edge, valid_nodes) -> bool:
+    """Returns true iff all non-None edges are in valid_nodes."""
+    dependency, target = edge
+    return ((dependency is None or dependency in valid_nodes)
+            and (target in valid_nodes))
+
+
+def _select_valid_urls(connections, base_ur: str) -> Set[str]:
+    """Returns the set of URLs from a single connection that should
+    be  considered in the final dependency graph.
+    """
+    # Sometimes the above URL and the URLs in the connections differ by
+    # a suffix as /, /#, or /#!/ (angular), so only consider the netloc.
+    base_url = "https://" + urllib.parse.urlsplit(base_ur).netloc
+
+    return next(urls for urls in connections.values()
+                if any(url.startswith(base_url) for url in urls))
+
+
+def _to_adjacency_list(fetch_output) -> Set[Tuple[Optional[str], str]]:
     """Return an adjacency list of (dependency, url) for the provided
     fetch results.
     """
     assert fetch_output["status"] == "success"
 
+    # Set of (dependency, url) forming the edges of the graph
     edges: Set[Tuple[Optional[str], str]] = set()
+    # Dictionary of connection id -> urls retrieved on connection
     connections: Dict[int, Set[str]] = dict()
 
     for log_message in fetch_output["http_trace"]:
@@ -90,58 +110,108 @@ def to_adjacency_list(fetch_output) -> Set[Tuple[Optional[str], str]]:
         _extract_connection(log_message["message"]["message"], connections)
     assert edges
 
-    breakpoint()
+    # Select the connection group that contains the final url
+    valid_nodes = _select_valid_urls(connections, fetch_output["final_url"])
 
-    # If the original URL is a prefix of the final URL, use the original URL
-    base_url = fetch_output["url"]
-    if not fetch_output["final_url"].startswith(base_url):
-        base_url = fetch_output["final_url"]
-        # Add a root edge for our new base URL, so that we can start the
-        # collection from this URL instead
-        edges.add((None, base_url))
+    # Drop edges that contain an invalid node
+    final_edges = set(e for e in edges if is_valid_edge(e, valid_nodes))
 
-    final_edges = set(edge for edge in edges if _same_domain(edge, base_url))
-    if not final_edges:
-        _LOGGER.warning("No edges left after domain filtering for url: %r, "
-                        "final_url: %r",
-                        fetch_output["url"], fetch_output["final_url"])
-
-    return _check_graph(final_edges)
+    return _check_graph(final_edges, fetch_output["final_url"])
 
 
-def _check_graph(edges):
+def _check_graph(edges, url: str):
     """Check our assumptions about the resulting graph from the adjacency
-    list, namely:
-        - the resulting graph is rooted at the None node,
+    list.
     """
     # Skip checking if the edge list is empty
     if not edges:
         return edges
 
-    # Check that the graph is rooted at the None node
-    dep_only = set(s for (s, t) in edges) - set(t for (s, t) in edges)
-    assert len(dep_only) == 1
-    assert None in dep_only
+    root_nodes = set(s for (s, t) in edges) - set(t for (s, t) in edges)
+    if len(root_nodes) > 1:
+        _LOGGER.warning("Dropping %r as there are two root nodes: %r", url,
+                        root_nodes)
+        return set()
+
+    # If there is a single non-None root node, add the None root node
+    if len(root_nodes) == 1 and None not in root_nodes:
+        root = root_nodes.pop()
+        _LOGGER.debug("Adding root edge None->%s for %r", root, url)
+        edges.add((None, root))
 
     # Check that there is only URL which is initiated by the "user"
     n_initiated = sum(1 for e in edges if e[0] is None)
-    assert n_initiated == 1
+    if n_initiated != 1:
+        _LOGGER.warning("Dropping %r as there are %d user-initated nodes.",
+                        url, n_initiated)
+        return set()
 
     return edges
 
 
-def main(infile: str, prefix: str, log_level: int = 1):
-    pyqcd.init_logging(log_level)
+def to_adjacency_list(fetch_output_generator) -> Iterator[set]:
+    """Filter and generate non-empty adjacency lists from the input
+    generated of fetch results.
+    """
+    seen_urls = set()
+    duplicate_counter: Counter = Counter()
+    n_insufficient = 0
 
+    for fetch_output in fetch_output_generator:
+        url = fetch_output["final_url"]
+
+        if fetch_output["status"] != "success":
+            _LOGGER.debug(
+                "Dropping %r with a status of %r.", url, fetch_output["status"])
+            continue
+
+        if not url.startswith("https"):
+            _LOGGER.warning("Dropping %r as it is not HTTPS.", url)
+            continue
+
+        if url in seen_urls:
+            _LOGGER.debug("Dropping %r as it was already encountered.", url)
+            duplicate_counter[url] += 1
+            continue
+
+        if not (edges := _to_adjacency_list(fetch_output)):
+            continue
+
+        n_urls = len(set(chain.from_iterable(edges)))
+        if n_urls < N_MININMUM_URLS:
+            _LOGGER.debug("Dropping %r as it has only %d/%d required URLs.",
+                          url, n_urls, N_MININMUM_URLS)
+            n_insufficient += 1
+            continue
+
+        yield edges
+        seen_urls.add(url)
+
+    _LOGGER.info("Dropped duplicates: %s.", dict(duplicate_counter))
+    _LOGGER.info("Dropped %d URLs with less than the %d minimum URLs.",
+                 n_insufficient, N_MININMUM_URLS)
+
+
+def main(infile: str, prefix: str, verbose: bool = False):
+    """Filter browser URL request logs and extract dependency graphs."""
+    pyqcd.init_logging(int(verbose) + 1)
+    _LOGGER.info("Running with arguments: %s.", locals())
+
+    file_id = -1
     with gzip.open(infile, mode="r") as json_lines:
-        entries = filter(
-            lambda x: x["status"] == "success",
-            (json.loads(line) for line in json_lines)
-        )
+        for file_id, edges in enumerate(
+            to_adjacency_list(json.loads(line) for line in json_lines)
+        ):
+            frame = pd.DataFrame(edges, columns=["dependency", "url"])
+            frame.to_csv(f"{prefix}{file_id:03d}.csv", header=False,
+                         index=False)
 
-        for fetch_output in entries:
-            if edges := to_adjacency_list(fetch_output):
-                frame = pd.DataFrame(edges, columns=["dependency", "url"])
+    _LOGGER.info("Script complete. Extracted %d dependency graphs.", file_id+1)
 
 
-main("results/determine-url-deps/browser-logs.json.gz", "/tmp/x")
+if __name__ == "__main__":
+    main(**doceasy.doceasy(__doc__, {
+        "INFILE": str,
+        "PREFIX": doceasy.Or(str, doceasy.Use(lambda _: "x")),
+        "--verbose": bool,
+    }))
