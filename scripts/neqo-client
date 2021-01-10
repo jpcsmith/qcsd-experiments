@@ -1,0 +1,7 @@
+exec docker exec -w /Users/luca/Documents/ETHZ/Thesis/code/neqo-qcd/ \ 
+-e LD_LIBRARY_PATH=/Users/luca/Documents/ETHZ/Thesis/code/neqo-qcd/target/debug/build/neqo-crypto-044e50838ff4228a/out/dist/Debug/lib/ \
+-e SSLKEYLOGFILE=out.log \
+-e RUST_LOG="neqo_transport=info,debug" \
+-e CSDEF_DUMMY_IDS="${CSDEF_DUMMY_IDS}" \
+-e CSDEF_DUMMY_SCHEDULE="${CSDEF_DUMMY_SCHEDULE}" \
+neqo-qcd target/debug/neqo-client "$@"
