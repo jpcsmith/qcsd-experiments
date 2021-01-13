@@ -1,4 +1,4 @@
-"""Usage: module [-v] [INFILE [PREFIX]]
+"""Usage: module [options] [INFILE [PREFIX]]
 
 Filter browser URL request logs and extract dependency graphs.
 
@@ -9,14 +9,19 @@ CSV adjancency list of the pairs (dependency URL, URL), and are written
 to the files PREFIX000.csv, PREFIX001.csv ...
 
 Options:
-    -v, --verbose   Output more log messages.
+    --groupby-connection
+        Group the URLs for each request by the logged connection ID
+        instead of by the URL's origin as is done in neqo-client.
+
+    -v, --verbose
+        Output more log messages.
 """
 import json
 import gzip
 import logging
 import urllib.parse
-from collections import Counter
-from typing import Set, Tuple, Optional, Dict, Iterator
+from collections import Counter, defaultdict
+from typing import Set, Tuple, Optional, Dict, Iterator, Any
 from itertools import chain
 
 import doceasy
@@ -26,6 +31,9 @@ import pyqcd
 
 #: The minimum number of URLs in each dependency graph
 N_MININMUM_URLS = 5
+#: Allow error codes for too many requests (429) and server timeout (522) since
+#: these are transient.
+ALLOWED_HTTP_ERRORS = [429, 522, ]
 
 _LOGGER = logging.getLogger("url-dep-graph")
 
@@ -66,15 +74,6 @@ def _extract_edges(log_message, edges):
         edges.add((None, request["url"]))
 
 
-def _extract_connection(log_message, connections):
-    if log_message["method"] != "Network.responseReceived":
-        return
-
-    response = log_message["params"]["response"]
-    urls_on_conn = connections.setdefault(response["connectionId"], set())
-    urls_on_conn.add(response["url"])
-
-
 def is_valid_edge(edge, valid_nodes) -> bool:
     """Returns true iff all non-None edges are in valid_nodes."""
     dependency, target = edge
@@ -82,19 +81,50 @@ def is_valid_edge(edge, valid_nodes) -> bool:
             and (target in valid_nodes))
 
 
-def _select_valid_urls(connections, base_ur: str) -> Set[str]:
-    """Returns the set of URLs from a single connection that should
-    be  considered in the final dependency graph.
-    """
-    # Sometimes the above URL and the URLs in the connections differ by
-    # a suffix as /, /#, or /#!/ (angular), so only consider the netloc.
-    base_url = "https://" + urllib.parse.urlsplit(base_ur).netloc
+class _UrlGrouper:
+    """Group URLs by either their connection id or origin."""
+    def __init__(self, groupby_connection: bool):
+        self._connections: Dict[Any, Set[str]] = defaultdict(set)
+        self._use_origin = not groupby_connection
 
-    return next(urls for urls in connections.values()
-                if any(url.startswith(base_url) for url in urls))
+    def maybe_add(self, log_message):
+        """Track the URL in the log message if it represents a received
+        response.
+        """
+        if log_message["method"] != "Network.responseReceived":
+            return
+
+        response = log_message["params"]["response"]
+        if (response["status"] >= 400 and response["status"] not in
+                ALLOWED_HTTP_ERRORS):
+            return
+
+        key = response["connectionId"]
+        if self._use_origin:
+            parse = urllib.parse.urlsplit(response["url"])
+            key = (parse.scheme, parse.netloc)
+
+        self._connections[key].add(response["url"])
+
+    def get_group_by_origin(self, url: str) -> Set[str]:
+        """Returns the group of URLs that are associated with
+        the origin of provided URL.
+        """
+        parse = urllib.parse.urlsplit(url)
+
+        if self._use_origin:
+            return self._connections[(parse.scheme, parse.netloc)]
+
+        # Sometimes the above URL and the URLs in the connections differ by
+        # a suffix as /, /#, or /#!/ (angular), so only consider the netloc.
+        base_url = "{parse.scheme}://{parse.netloc}"
+        return next(urls for urls in self._connections.values()
+                    if any(url.startswith(base_url) for url in urls))
 
 
-def _to_adjacency_list(fetch_output) -> Set[Tuple[Optional[str], str]]:
+def _to_adjacency_list(
+    fetch_output, groupby_connection: bool
+) -> Set[Tuple[Optional[str], str]]:
     """Return an adjacency list of (dependency, url) for the provided
     fetch results.
     """
@@ -102,16 +132,20 @@ def _to_adjacency_list(fetch_output) -> Set[Tuple[Optional[str], str]]:
 
     # Set of (dependency, url) forming the edges of the graph
     edges: Set[Tuple[Optional[str], str]] = set()
-    # Dictionary of connection id -> urls retrieved on connection
-    connections: Dict[int, Set[str]] = dict()
+
+    connections = _UrlGrouper(groupby_connection)
+
+    # Dictionary of (scheme, host, port) -> URL to determine which URLs share
+    # the same origin. Used instead of the connectionId since this is the method
+    # that neqo-client uses.
 
     for log_message in fetch_output["http_trace"]:
         _extract_edges(log_message["message"]["message"], edges)
-        _extract_connection(log_message["message"]["message"], connections)
+        connections.maybe_add(log_message["message"]["message"])
     assert edges
 
     # Select the connection group that contains the final url
-    valid_nodes = _select_valid_urls(connections, fetch_output["final_url"])
+    valid_nodes = connections.get_group_by_origin(fetch_output["final_url"])
 
     # Drop edges that contain an invalid node
     final_edges = set(e for e in edges if is_valid_edge(e, valid_nodes))
@@ -149,7 +183,7 @@ def _check_graph(edges, url: str):
     return edges
 
 
-def to_adjacency_list(fetch_output_generator) -> Iterator[set]:
+def to_adjacency_list(fetch_output_generator, **kwargs) -> Iterator[set]:
     """Filter and generate non-empty adjacency lists from the input
     generated of fetch results.
     """
@@ -174,7 +208,7 @@ def to_adjacency_list(fetch_output_generator) -> Iterator[set]:
             duplicate_counter[url] += 1
             continue
 
-        if not (edges := _to_adjacency_list(fetch_output)):
+        if not (edges := _to_adjacency_list(fetch_output, **kwargs)):
             continue
 
         n_urls = len(set(chain.from_iterable(edges)))
@@ -192,7 +226,7 @@ def to_adjacency_list(fetch_output_generator) -> Iterator[set]:
                  n_insufficient, N_MININMUM_URLS)
 
 
-def main(infile: str, prefix: str, verbose: bool = False):
+def main(infile: str, prefix: str, verbose: bool, groupby_connection: bool):
     """Filter browser URL request logs and extract dependency graphs."""
     pyqcd.init_logging(int(verbose) + 1)
     _LOGGER.info("Running with arguments: %s.", locals())
@@ -200,7 +234,8 @@ def main(infile: str, prefix: str, verbose: bool = False):
     file_id = -1
     with gzip.open(infile, mode="r") as json_lines:
         for file_id, edges in enumerate(
-            to_adjacency_list(json.loads(line) for line in json_lines)
+            to_adjacency_list((json.loads(line) for line in json_lines),
+                              groupby_connection=groupby_connection)
         ):
             frame = pd.DataFrame(edges, columns=["dependency", "url"])
             frame[["url", "dependency"]].to_csv(
@@ -214,4 +249,5 @@ if __name__ == "__main__":
         "INFILE": str,
         "PREFIX": doceasy.Or(str, doceasy.Use(lambda _: "x")),
         "--verbose": bool,
+        "--groupby-connection": bool
     }))
