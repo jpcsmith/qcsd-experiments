@@ -1,47 +1,16 @@
-from lab.sniffer import PacketSniffer
-import os
-
-
-rule collect_defended:
-    """"Collect QUIC traces shaped with dummy streams from a dependencies-csv"""
+rule collect_front_defended:
+    """Collect defended QUIC traces shaped with the FRONT defence."""
     input:
-        "deps-sample.csv"
+        "results/determine-url-deps/dependencies/{sample_id}.csv"
     output:
-        "results/collect/collect_cap.pcapng"
+        stdout="results/collect/front_defended/{sample_id}/stdout.txt",
+        dummy_ids="results/collect/front_defended/{sample_id}/dummy_streams.txt",
+        sampled_schedule="results/collect/front_defended/{sample_id}/schedule.csv",
+        pcap="results/collect/front_defended/{sample_id}/trace.pcapng",
     log:
-        "results/collect/collect.log"
-    params:
-        neqo_path= config['neqo'],
-        # urls=("https://vanilla.neqo-test.com:7443/" "https://vanilla.neqo-test.com:7443/css/bootstrap.min.css"
-        #      " https://vanilla.neqo-test.com:7443/css/fontAwesome.css" "https://vanilla.neqo-test.com:7443/css/hero-slider.css"
-        #      " https://vanilla.neqo-test.com:7443/css/templatemo-main.css" "https://vanilla.neqo-test.com:7443/css/owl-carousel.css"
-        #      " https://vanilla.neqo-test.com:7443/js/vendor/modernizr-2.8.3-respond-1.4.2.min.js"
-        #      " https://vanilla.neqo-test.com:7443/img/1st-item.jpg" "https://vanilla.neqo-test.com:7443/img/2nd-item.jpg"
-        #      " https://vanilla.neqo-test.com:7443/img/3rd-item.jpg" "https://vanilla.neqo-test.com:7443/img/4th-item.jpg"
-        #      " https://vanilla.neqo-test.com:7443/img/5th-item.jpg" "https://vanilla.neqo-test.com:7443/img/6th-item.jpg"
-        #      " https://vanilla.neqo-test.com:7443/img/1st-tab.jpg" "https://vanilla.neqo-test.com:7443/img/2nd-tab.jpg"
-        #      " https://vanilla.neqo-test.com:7443/img/3rd-tab.jpg" "https://vanilla.neqo-test.com:7443/img/4th-tab.jpg"
-        #      " https://vanilla.neqo-test.com:7443/js/vendor/bootstrap.min.js" "https://vanilla.neqo-test.com:7443/js/plugins.js"
-        #      " https://vanilla.neqo-test.com:7443/js/main.js" "https://vanilla.neqo-test.com:7443/img/1st-section.jpg"
-        #      " https://vanilla.neqo-test.com:7443/img/2nd-section.jpg" "https://vanilla.neqo-test.com:7443/img/3rd-section.jpg"
-        #      " https://vanilla.neqo-test.com:7443/img/4th-section.jpg" "https://vanilla.neqo-test.com:7443/img/5th-section.jpg"
-        #      " https://vanilla.neqo-test.com:7443/fonts/fontawesome-webfont.woff2?v=4.7.0" "https://vanilla.neqo-test.com:7443/img/prev.png"
-        #      " https://vanilla.neqo-test.com:7443/img/next.png" "https://vanilla.neqo-test.com:7443/img/loading.gif"
-        #      " https://vanilla.neqo-test.com:7443/img/close.png" ),
-        dummy_urls=("https://vanilla.neqo-test.com:7443/img/2nd-big-item.jpg"
-                    " https://vanilla.neqo-test.com:7443/css/bootstrap.min.css"
-                    " https://vanilla.neqo-test.com:7443/img/3rd-item.jpg"
-                    " https://vanilla.neqo-test.com:7443/img/4th-item.jpg"
-                    " https://vanilla.neqo-test.com:7443/img/5th-item.jpg"),
-        dummy_ids="results/saves/vanilla_ids.csv",
-        dummy_schedule="results/saves/vanilla_schedule.csv"
+        "results/collect/front_defended/{sample_id}/stderr.txt"
     shell: """\
-        neqo-client --dummy-urls {params.dummy_urls} --url-dependencies-from tests/fake-deps-sample.csv "https://vanilla.neqo-test.com:7443/" 2> {log}
-        """
-
-rule test:
-    output: "test.txt"
-    shell:
-        """\
-           CSDEF_DUMMY_IDS="restuls/collect/saves/foo.csv" neqo-client -h
+        CSDEF_DUMMY_ID={output.dummy_ids} CSDEF_DUMMY_SCHEDULE={output.sampled_schedule} \
+        python3 -m pyqcd.collect.neqo_capture_client --pcap-file {output.pcap} \
+                -- --url-dependencies-from {input} > {output.stdout} 2> {log}
         """
