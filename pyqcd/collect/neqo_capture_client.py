@@ -51,7 +51,7 @@ def run_neqo(neqo_args, keylog_file: str) -> NeqoResult:
 
         args = " ".join(neqo_args)
         subprocess.run(
-            f"neqo-client {args} | tee {output_file.name}",
+            f"set -o pipefail; neqo-client {args} | tee {output_file.name}",
             # We need the shell so that we can do redirection
             shell=True, executable='bash', env=env,
             # Raise an exception on program error codes
@@ -119,7 +119,7 @@ def main(neqo_args, pcap_file: Optional[str]):
 
 
 if __name__ == "__main__":
-    main(**doceasy.doceasy(__doc__, {
+    main(**doceasy.doceasy(__doc__, doceasy.Schema({
         "NEQO_ARGS": [str],
         "--pcap-file": doceasy.Or(None, str)
-    }))
+    }, ignore_extra_keys=True)))
