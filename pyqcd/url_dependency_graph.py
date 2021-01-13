@@ -203,8 +203,8 @@ def main(infile: str, prefix: str, verbose: bool = False):
             to_adjacency_list(json.loads(line) for line in json_lines)
         ):
             frame = pd.DataFrame(edges, columns=["dependency", "url"])
-            frame.to_csv(f"{prefix}{file_id:03d}.csv", header=False,
-                         index=False)
+            frame[["url", "dependency"]].to_csv(
+                f"{prefix}{file_id:03d}.csv", header=False, index=False)
 
     _LOGGER.info("Script complete. Extracted %d dependency graphs.", file_id+1)
 
