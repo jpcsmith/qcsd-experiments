@@ -30,7 +30,7 @@ import pandas as pd
 import pyqcd
 
 #: The minimum number of URLs in each dependency graph
-N_MININMUM_URLS = 5
+N_MININMUM_URLS = 6
 #: Allow error codes for too many requests (429) and server timeout (522) since
 #: these are transient.
 ALLOWED_HTTP_ERRORS = [429, 522, ]
@@ -212,7 +212,8 @@ def to_adjacency_list(fetch_output_generator, **kwargs) -> Iterator[set]:
             continue
 
         n_urls = len(set(chain.from_iterable(edges)))
-        if n_urls < N_MININMUM_URLS:
+        # The +1 accounts for the presence of the empty root URL
+        if n_urls < (N_MININMUM_URLS + 1):
             _LOGGER.debug("Dropping %r as it has only %d/%d required URLs.",
                           url, n_urls, N_MININMUM_URLS)
             n_insufficient += 1
