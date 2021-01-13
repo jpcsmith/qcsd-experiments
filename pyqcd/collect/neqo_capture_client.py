@@ -83,20 +83,25 @@ def _filter_packets(pcap_bytes: bytes, neqo_output: str) -> bytes:
     neqo_output and return a pcapng with the data.
     """
     match = re.search(
-        r'^H3 Client connecting: V4\((?P<src_ip>.*):(?P<src_port>\d+)\) '
-        r'-> V4\((?P<dst_ip>.*):(?P<dst_port>\d+)\)$',
+        r"^H3 Client connecting: "
+        r"(?P<src_ver>V[46])\(\[+(?P<src_ip>.*)\]+:(?P<src_port>\d+)\) "
+        r"-> (?P<dst_ver>V[46])\(\[+(?P<dst_ip>.*)\]+:(?P<dst_port>\d+)\)$",
         neqo_output, flags=re.MULTILINE
     )
     assert match
 
+    dst_ver = "ipv6" if match["dst_ver"] == "V6" else "ip"
     result = subprocess.run([
         "tshark",
         "-r", "-",
         "-w", "-", "-F", "pcapng",
         # Filter to packets from the remote ip and local port
         # Exclude the local IP as this may change depending on the vantage point
-        "-Y", (f"ip.addr=={match['dst_ip']} and udp.port=={match['dst_port']} "
-               f"and udp.port=={match['src_port']}")
+        "-Y", " and ".join([
+            f"{dst_ver}.addr=={match['dst_ip']}",
+            f"udp.port=={match['dst_port']}",
+            f"udp.port=={match['src_port']}",
+        ])
     ], check=True, input=pcap_bytes, stdout=PIPE)
 
     # Ensure that the result is neither none nor empty
