@@ -14,3 +14,17 @@ rule collect_front_defended:
         python3 -m pyqcd.collect.neqo_capture_client --pcap-file {output.pcap} \
                 -- --url-dependencies-from {input} > {output.stdout} 2> {log}
         """
+
+
+def collect_front_defended__all_input(wildcards):
+    input_dir = checkpoints.url_dependencies__csv.get(**wildcards).output[0]
+    sample_ids = glob_wildcards(input_dir + "/{sample_id}.csv").sample_id
+
+    return expand(rules.collect_front_defended.output["pcap"], sample_id=sample_ids)
+
+
+rule collect_front_defended__all:
+    """Determines the number of URLs samples to be collected and starts the
+    collection."""
+    input: collect_front_defended__all_input
+    message: "rule collect_front_defended__all:\n\tConvenience method for collecting the FRONT defended samples"
