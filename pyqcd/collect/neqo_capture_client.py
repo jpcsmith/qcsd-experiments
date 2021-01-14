@@ -19,7 +19,8 @@ import subprocess
 from subprocess import PIPE
 from tempfile import NamedTemporaryFile
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union, Tuple, NamedTuple
+from ipaddress import IPv4Address, IPv6Address, ip_address
 
 import doceasy
 from lab.sniffer import TCPDumpPacketSniffer
@@ -78,30 +79,50 @@ def _embed_tls_keys(pcap_bytes: bytes, keylog_file: str) -> bytes:
     return result.stdout
 
 
+Endpoint = NamedTuple('Endpoint', [
+    ('ip', Union[IPv4Address, IPv6Address]), ('port', int)
+])
+
+
+def extract_endpoints(neqo_output: str) -> Tuple[Endpoint, Endpoint]:
+    """Extract the endpoints from the log output."""
+    conn_lines = [line for line in neqo_output.split("\n")
+                  if line.startswith("H3 Client connecting:")]
+
+    if len(conn_lines) == 0:
+        raise ValueError("Output does not contain an endpoint message.")
+    if len(conn_lines) > 1:
+        raise ValueError(f"Multiple connections in Neqo output: {conn_lines}.")
+
+    pattern = (r"(?:(?P<{end}ver>V4|V6)\()?"
+               r"\[?(?P<{end}ip>[.\d]+|[:\dA-Fa-f]+)\]?:(?P<{end}port>\d+)"
+               r"(?({end}ver)\))")
+    pattern = "{} -> {}".format(
+        pattern.format(end="l"), pattern.format(end="r"))
+    match = re.search(pattern, conn_lines[0])
+
+    if not match:
+        raise ValueError(f"Unable to parse connection line: {conn_lines[0]}")
+
+    return (Endpoint(ip_address(match["lip"]), int(match["lport"])),
+            Endpoint(ip_address(match["rip"]), int(match["rport"])))
+
+
 def _filter_packets(pcap_bytes: bytes, neqo_output: str) -> bytes:
     """Filter the packets to the IPs and ports extracted from
     neqo_output and return a pcapng with the data.
     """
-    match = re.search(
-        r"^H3 Client connecting: "
-        r"(?P<src_ver>V[46])\(\[+(?P<src_ip>.*)\]+:(?P<src_port>\d+)\) "
-        r"-> (?P<dst_ver>V[46])\(\[+(?P<dst_ip>.*)\]+:(?P<dst_port>\d+)\)$",
-        neqo_output, flags=re.MULTILINE
-    )
-    assert match
+    (local, remote) = extract_endpoints(neqo_output)
 
-    dst_ver = "ipv6" if match["dst_ver"] == "V6" else "ip"
+    dst_ver = "ipv6" if remote.ip.version == 6 else "ip"
     result = subprocess.run([
         "tshark",
         "-r", "-",
         "-w", "-", "-F", "pcapng",
         # Filter to packets from the remote ip and local port
         # Exclude the local IP as this may change depending on the vantage point
-        "-Y", " and ".join([
-            f"{dst_ver}.addr=={match['dst_ip']}",
-            f"udp.port=={match['dst_port']}",
-            f"udp.port=={match['src_port']}",
-        ])
+        "-Y", (f"{dst_ver}.addr=={remote.ip} and udp.port=={remote.port} "
+               f"and udp.port=={local.port}")
     ], check=True, input=pcap_bytes, stdout=PIPE)
 
     # Ensure that the result is neither none nor empty
