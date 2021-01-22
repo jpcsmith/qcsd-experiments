@@ -21,6 +21,19 @@ rule collect_front_defended:
                 -- --url-dependencies-from {input} > {output.stdout} 2> {log}
         """
 
+rule front_trace_csv:
+    input:
+        dummy_ids=rules.collect_front_defended.output["dummy_ids"],
+        pcap=rules.collect_front_defended.output["pcap"]
+    output:
+        "results/collect/front_defended/{sample_id}/front_cover_traffic.csv"
+    shell: """\
+        tshark -r {input.pcap} \
+            -Y "quic.stream.stream_id in {{$(<{input.dummy_ids})}} \
+                or quic.padding_length > 0 or quic.packet_number == 0" \
+            -Tfields -e frame.time_epoch -e quic.stream.length -e quic.padding_length \
+            -e udp.srcport -e quic.packet_number -E header=y -E separator=\; > {output}
+        """
 
 def collect_front_defended__all_input(wildcards):
     input_dir = checkpoints.url_dependencies__csv.get(**wildcards).output[0]
