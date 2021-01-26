@@ -21,12 +21,33 @@ rule collect_front_defended:
                 -- --url-dependencies-from {input} > {output.stdout} 2> {log}
         """
 
+rule collect_front_baseline:
+    """Collect normal QUIC traces as baseline."""
+    input:
+        "results/determine-url-deps/dependencies/{sample_id}.csv"
+    output:
+        stdout="results/collect/front_baseline/{sample_id}/stdout.txt",
+        dummy_ids="results/collect/front_baseline/{sample_id}/dummy_streams.txt",
+        sampled_schedule="results/collect/front_baseline/{sample_id}/schedule.csv",
+        pcap="results/collect/front_baseline/{sample_id}/trace.pcapng",
+    log:
+        "results/collect/front_baseline/{sample_id}/stderr.txt"
+    resources:
+        cap_iface=1
+    shell: """\
+        CSDEF_NO_SHAPING=1 \
+        python3 -m pyqcd.collect.neqo_capture_client --pcap-file {output.pcap} \
+                -- --url-dependencies-from {input} > {output.stdout} 2> {log}
+        """
+
 rule front_trace_csv:
     input:
-        dummy_ids=rules.collect_front_defended.output["dummy_ids"],
-        pcap=rules.collect_front_defended.output["pcap"]
+        # dummy_ids=rules.collect_front_defended.output["dummy_ids"],
+        # pcap=rules.collect_front_defended.output["pcap"]
+        dummy_ids="results/collect/front_defended/001/dummy_streams.txt",
+        pcap="results/collect/front_defended/001/trace.pcapng"
     output:
-        "results/collect/front_defended/{sample_id}/front_cover_traffic.csv"
+        "results/collect/front_defended/001/front_cover_traffic.csv"
     shell: """\
         tshark -r {input.pcap} \
             -Y "quic.stream.stream_id in {{$(<{input.dummy_ids})}} \
@@ -41,9 +62,22 @@ def collect_front_defended__all_input(wildcards):
 
     return expand(rules.collect_front_defended.output["pcap"], sample_id=sample_ids)
 
+def collect_front_baseline__all_input(wildcards):
+    input_dir = checkpoints.url_dependencies__csv.get(**wildcards).output[0]
+    sample_ids = glob_wildcards(input_dir + "/{sample_id}.csv").sample_id
+
+    return expand(rules.collect_front_baseline.output["pcap"], sample_id=sample_ids)
+
+
 
 rule collect_front_defended__all:
     """Determines the number of URLs samples to be collected and starts the
     collection."""
     input: collect_front_defended__all_input
     message: "rule collect_front_defended__all:\n\tConvenience method for collecting the FRONT defended samples"
+
+rule collect_front_baseline__all:
+    """Determines the number of URLs samples to be collected and starts the
+    collection."""
+    input: collect_front_baseline__all_input
+    message: "rule collect_front_baseline__all:\n\tConvenience method for collecting the FRONT baseline samples"
