@@ -44,8 +44,6 @@ rule front_trace_csv:
     input:
         dummy_ids=rules.collect_front_defended.output["dummy_ids"],
         pcap=rules.collect_front_defended.output["pcap"]
-        # dummy_ids="results/collect/front_defended/001/dummy_streams.txt",
-        # pcap="results/collect/front_defended/001/trace.pcapng"
     output:
         "results/collect/front_defended/{sample_id}/front_cover_traffic.csv"
     shell: """\
