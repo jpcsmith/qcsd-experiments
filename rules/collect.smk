@@ -17,8 +17,9 @@ rule collect_front_defended:
         cap_iface=1
     shell: """\
         CSDEF_DUMMY_ID={output.dummy_ids} CSDEF_DUMMY_SCHEDULE={output.sampled_schedule} \
-        python3 -m pyqcd.collect.neqo_capture_client --pcap-file {output.pcap} \
-                -- --url-dependencies-from {input} > {output.stdout} 2> {log}
+        RUST_LOG=neqo=trace python3 -m pyqcd.collect.neqo_capture_client \
+            --pcap-file {output.pcap} -- --url-dependencies-from {input} \
+            > {output.stdout} 2> {log}
         """
 
 rule collect_front_baseline:
