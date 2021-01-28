@@ -79,8 +79,8 @@ def main(inputs, output_file):
     """Measure Pearson correlation between two traces.
         Outputs graph of rolling window Pearson."""
 
-    (outgoing, incoming) = load_cover_trace(inputs[0], inputs[1])
-    (baseline_out, baseline_in) = load_schedule(inputs[2])
+    (outgoing, incoming) = load_cover_trace(inputs[0], inputs[2])
+    (baseline_out, baseline_in) = load_schedule(inputs[1])
 
     r_window_size = 100
 
@@ -124,6 +124,5 @@ def main(inputs, output_file):
 if __name__ == "__main__":
     main(**doceasy.doceasy(__doc__, doceasy.Schema({
         "INPUTS": [str],
-        "--output-file": doceasy.Or(None, str),
-        "--window-size": doceasy.Or(100, int)
+        "--output-file": doceasy.Or(None, str)
     }, ignore_extra_keys=True)))
