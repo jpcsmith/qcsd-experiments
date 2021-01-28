@@ -2,7 +2,8 @@ rule pearson_front_dummy:
     """Measures Pearson correlation of defended trace with the dummy schedule"""
     input:
         defended="results/collect/front_defended/{sample_id}/front_cover_traffic.csv",
-        baseline="results/collect/front_defended/{sample_id}/schedule.csv"
+        baseline="results/collect/front_defended/{sample_id}/schedule.csv",
+        dummy_ids="results/collect/front_defended/{sample_id}/dummy_streams.txt"
     output:
         plot="results/pearson/front/{sample_id}/rolling_pearson.png",
         stdout="results/pearson/front/{sample_id}/stdout.txt"
@@ -10,7 +11,7 @@ rule pearson_front_dummy:
         "results/pearson/front/{sample_id}/stderr.txt"
     shell: """\
         python3 -m pyqcd.pearson.measure_pearson --output-file {output.plot} \
-        -- {input.defended} {input.baseline} > {output.stdout} 2> {log}
+        -- {input.defended} {input.baseline} {input.dummy_ids} > {output.stdout} 2> {log}
         """
 
 def pearson_front_dummy__all_input(wildcards):

@@ -4,11 +4,16 @@
 Measures the distance between two dummy traces using Pearson correlation.
 Traces are sampled into 1ms intervals.
 
+Inputs:
+    Defended Trace
+    Dummy Schedule
+    Dummy ids list
+
 Options:
     --output-file filename
         Save the dummy packets trace and rolling window pearson graph
         to filename.
-    --window-size num
+    --window-size int
         Size of the rolling window used to calculate Pearson's correlation
         in the traces.
 """
@@ -22,9 +27,11 @@ from typing import Optional, Union, Tuple, NamedTuple
 import doceasy
 
 
-def load_cover_trace(filename):
+def load_cover_trace(filename, dummy_streams):
     data = pd.read_csv(filename, delimiter=";")
     data = data.sort_values(by="frame.time_epoch").reset_index(drop=True)
+
+    dummy_ids = pd.read_csv(dummy_streams, header=None, names=["id"])["id"]
 
     # Ensure that the trace starts with packet number zero
     assert data.loc[0, "quic.packet_number"] == 0
@@ -34,9 +41,9 @@ def load_cover_trace(filename):
     # as they're only there for the starting time
     data = data[data["quic.packet_number"] != 0].reset_index(drop=True)
 
-    # TODO: Should not include stremas which are not a part of the dummy traffic
+    size_if_dummy = lambda v: int(v) if (int(v) in dummy_ids) else 0
     data["length"] = data["quic.stream.length"].map(
-        lambda x: 0 if x is np.nan else sum(int(v) for v in x.split(","))
+        lambda x: 0 if x is np.nan else sum(size_if_dummy(v) for v in x.split(","))
     )
     data["length"] += data["quic.padding_length"].fillna(0)
     data["length"] = data["length"].astype(int)
@@ -72,8 +79,8 @@ def main(inputs, output_file):
     """Measure Pearson correlation between two traces.
         Outputs graph of rolling window Pearson."""
 
-    (outgoing, incoming) = load_cover_trace(inputs[0])
-    (baseline_out, baseline_in) = load_schedule(inputs[1])
+    (outgoing, incoming) = load_cover_trace(inputs[0], inputs[1])
+    (baseline_out, baseline_in) = load_schedule(inputs[2])
 
     r_window_size = 100
 
@@ -117,5 +124,6 @@ def main(inputs, output_file):
 if __name__ == "__main__":
     main(**doceasy.doceasy(__doc__, doceasy.Schema({
         "INPUTS": [str],
-        "--output-file": doceasy.Or(None, str)
+        "--output-file": doceasy.Or(None, str),
+        "--window-size": doceasy.Or(100, int)
     }, ignore_extra_keys=True)))
