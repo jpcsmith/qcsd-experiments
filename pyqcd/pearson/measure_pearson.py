@@ -1,8 +1,24 @@
+#!/usr/bin/env python3
+"""Usage: module [options] -- [INPUTS]...
+
+Measures the distance between two dummy traces using Pearson correlation.
+Traces are sampled into 1ms intervals.
+
+Options:
+    --output-file filename
+        Save the dummy packets trace and rolling window pearson graph
+        to filename.
+    --window-size num
+        Size of the rolling window used to calculate Pearson's correlation
+        in the traces.
+"""
+
 import pandas as pd
 import numpy as np
 import seaborn as sns
 from matplotlib import pyplot as plt
 import scipy.stats as stats
+from typing import Optional, Union, Tuple, NamedTuple
 import doceasy
 
 
@@ -31,7 +47,9 @@ def load_cover_trace(filename):
     data = data[["time", "length", "is_outgoing"]]
 
     data["time"] = pd.to_datetime(data["time"], unit="ms")
-    data = data.groupby("is_outgoing").resample("5ms", on="time", origin="epoch")["length"].sum()
+    data = data.groupby("is_outgoing").resample(
+                                        "1ms", on="time", origin="epoch"
+                                        )["length"].sum()
     return data.xs(True), data.xs(False)
 
 
@@ -43,63 +61,57 @@ def load_schedule(filename):
 
     data["time"] = pd.to_datetime(data["time"], unit="s")
 
-    data = data.groupby("is_outgoing").resample("5ms", on="time", origin="epoch")["length"].sum()
+    data = data.groupby("is_outgoing").resample(
+                                        "1ms", on="time", origin="epoch"
+                                        )["length"].sum()
 
     return data.xs(True), data.xs(False)
 
 
-def main(inputs, output_file: Optional[str]):
+def main(inputs, output_file):
     """Measure Pearson correlation between two traces.
         Outputs graph of rolling window Pearson."""
 
-    print(inputs)
-    print(output_file)
+    (outgoing, incoming) = load_cover_trace(inputs[0])
+    (baseline_out, baseline_in) = load_schedule(inputs[1])
 
-    # (outgoing, incoming) = load_cover_trace(
-    #     "../results/collect/front_defended/100/front_cover_traffic.csv"
-    #     )
-    # (baseline_out, baseline_in) = load_schedule(
-    #     "../results/collect/front_defended/100/schedule.csv"
-    #     )
+    r_window_size = 100
 
-    # figure, axes = plt.subplots(1, 1, figsize=(12, 4))
-    # outgoing_shift = outgoing + 50
-    # display(outgoing_shift)
-    # sns.scatterplot(x="time", y="length", data=outgoing_shift.to_frame().reset_index(), marker='.', ax=axes, label="Outgoing Shaped")
-    # sns.scatterplot(x="time", y="length", data=baseline_out.to_frame().reset_index(), marker='.', ax=axes, label="Baseline")
+    df = pd.concat(
+                [outgoing, baseline_out],
+                keys=["Defended", "Baseline"],
+                axis=1
+            ).fillna(0)
+    bins = np.arange(len(df))
 
-    # figure.savefig("/tmp/out.png", dpi=300, bbox_inches="tight")
-
-    # r_window_size = 24
-
-    # df = pd.concat([outgoing, baseline_out], keys=["Defended", "Baseline"], axis=1).fillna(0)
-    # bins= np.arange(len(df))
-
-    # rolling_r = df['Defended'].rolling(window=r_window_size, center=True).corr(df['Baseline'])
+    rolling_r = df['Defended'].rolling(
+                                window=r_window_size,
+                                center=True
+                                ).corr(df['Baseline'])
     # display(df)
     # display(rolling_r)
 
-    # f, ax = plt.subplots(2, 1, sharex=True, figsize=(14, 6))
-    # ax[0].scatter(x=bins,
-    #               y=df["Defended"],
-    #               label="Defended",
-    #               s=1.0,
-    #               marker='1'
-    #               )
-    # ax[0].scatter(x=bins,
-    #               y=df["Baseline"],
-    #               label="Baseline",
-    #               s=1.0,
-    #               marker='2'
-    #               )
-    # ax[0].set(xlabel='ms', ylabel='packet size')
-    # ax[0].legend()
-    # rolling_r.plot(ax=ax[1])
-    # ax[1].set(xlabel='ms', ylabel='Pearson r')
-    # f.show()
+    f, ax = plt.subplots(2, 1, sharex=True, figsize=(14, 6))
+    ax[0].scatter(x=bins,
+                  y=df["Defended"],
+                  label="Defended",
+                  s=1.3,
+                  marker='1'
+                  )
+    ax[0].scatter(x=bins,
+                  y=df["Baseline"],
+                  label="Baseline",
+                  s=1.3,
+                  marker='2'
+                  )
+    ax[0].set(xlabel='ms', ylabel='packet size')
+    ax[0].legend()
+    rolling_r.plot(ax=ax[1])
+    ax[1].set(xlabel='ms', ylabel='Pearson r')
+    f.savefig(output_file, dpi=300, bbox_inches="tight")
 
-    # r, p = stats.pearsonr(df["Defended"], df["Baseline"])
-    # print(f"Scipy computed Pearson r: {r} and p-value: {p}")
+    r, p = stats.pearsonr(df["Defended"], df["Baseline"])
+    print(f"Scipy computed Pearson r: {r} and p-value: {p}")
 
 
 if __name__ == "__main__":
