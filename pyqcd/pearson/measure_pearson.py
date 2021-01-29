@@ -32,7 +32,7 @@ def load_cover_trace(filename, dummy_streams):
     dummy_ids = pd.read_csv(dummy_streams, header=None, names=["id"])["id"]
 
     # Ensure that the trace starts with packet number zero
-    assert data.loc[0, "quic.packet_number"] == 0
+    assert int(data.loc[0, "quic.packet_number"]) == 0
     start_time = data.loc[0, "frame.time_epoch"]
 
     # Drop all packets with packet number zero
