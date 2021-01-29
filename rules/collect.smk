@@ -50,8 +50,9 @@ rule front_trace_csv:
         tshark -r {input.pcap} \
             -Y "quic.stream.stream_id in {{$(<{input.dummy_ids})}} \
                 or quic.padding_length > 0 or quic.packet_number == 0" \
-            -Tfields -e frame.time_epoch -e quic.stream.length -e quic.padding_length \
-            -e udp.srcport -e quic.packet_number -E header=y -E separator=\; > {output}
+            -Tfields -e frame.time_epoch -e quic.stream.length -e quic.length -e quic.stream.stream_id \
+            -e quic.padding_length -e udp.srcport -e quic.packet_number \
+            -E header=y -E separator=\; > {output}
         """
 
 def collect_front_defended__all_input(wildcards):
