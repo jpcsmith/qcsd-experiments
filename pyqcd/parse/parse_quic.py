@@ -184,14 +184,13 @@ def parse_chaff_traffic(pcap_file: str, chaff_streams_file: str) \
             frame.data_length() for frame in packet.stream_frames()
             if frame.stream_id not in chaff_streams)
 
-        if chaff_traffic > 0:
-            results.append(ChaffTrafficResult(
-                timestamp=packet.timestamp,
-                packet_number=packet.packet_number,
-                is_outgoing=packet.is_outgoing(),
-                chaff_traffic=chaff_traffic,
-                other_traffic=other_traffic,
-                packet_length=packet.packet_length,
-            ))
+        results.append(ChaffTrafficResult(
+            timestamp=packet.timestamp,
+            packet_number=packet.packet_number,
+            is_outgoing=packet.is_outgoing(),
+            chaff_traffic=chaff_traffic,
+            other_traffic=other_traffic,
+            packet_length=packet.packet_length,
+        ))
 
     return results
