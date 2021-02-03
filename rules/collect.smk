@@ -21,7 +21,7 @@ rule collect_front_defended:
         cap_iface=1
     shell: """\
         CSDEF_DUMMY_ID={output.dummy_ids} CSDEF_DUMMY_SCHEDULE={output.sampled_schedule} \
-        RUST_LOG=neqo=trace python3 -m pyqcd.collect.neqo_capture_client \
+        RUST_LOG=neqo=debug python3 -m pyqcd.collect.neqo_capture_client \
             --pcap-file {output.pcap} -- --url-dependencies-from {input} \
             > {output.stdout} 2> {log}
         """
@@ -38,7 +38,7 @@ rule collect_front_baseline:
     resources:
         cap_iface=1
     shell: """\
-        CSDEF_NO_SHAPING=1 RUST_LOG=neqo=trace \
+        CSDEF_NO_SHAPING=1 RUST_LOG=neqo=debug \
         python3 -m pyqcd.collect.neqo_capture_client --pcap-file {output.pcap} \
                 -- --url-dependencies-from {input} > {output.stdout} 2> {log}
         """
