@@ -21,7 +21,7 @@ rule collect_front_defended:
         cap_iface=1
     shell: """\
         CSDEF_DUMMY_ID={output.dummy_ids} CSDEF_DUMMY_SCHEDULE={output.sampled_schedule} \
-        RUST_LOG=neqo=debug python3 -m pyqcd.collect.neqo_capture_client \
+        RUST_LOG=neqo_transport=info,debug python3 -m pyqcd.collect.neqo_capture_client \
             --pcap-file {output.pcap} -- --url-dependencies-from {input} \
             > {output.stdout} 2> {log}
         """
@@ -38,7 +38,7 @@ rule collect_front_baseline:
     resources:
         cap_iface=1
     shell: """\
-        CSDEF_NO_SHAPING=1 RUST_LOG=neqo=debug \
+        CSDEF_NO_SHAPING=1 RUST_LOG=neqo_transport=info,debug \
         python3 -m pyqcd.collect.neqo_capture_client --pcap-file {output.pcap} \
                 -- --url-dependencies-from {input} > {output.stdout} 2> {log}
         """
@@ -58,6 +58,7 @@ rule front_trace_csv:
             -E header=y -E separator=\; > {output}
         """
 
+
 def collect_front_defended__all_input(wildcards):
     input_dir = checkpoints.url_dependencies__csv.get(**wildcards).output[0]
     sample_ids = glob_wildcards(input_dir + "/{sample_id}.csv").sample_id
@@ -72,6 +73,19 @@ def collect_front_baseline__all_input(wildcards):
     return expand(rules.collect_front_baseline.output["pcap"], sample_id=sample_ids,
                   rep_id=range(config["collect_reps"]))
 
+def collect_front_defended_single__all_input(wildcards):
+    input_dir = checkpoints.url_dependencies__csv.get(**wildcards).output[0]
+    sample_ids = glob_wildcards(input_dir + "/{sample_id}.csv").sample_id
+
+    return expand(rules.collect_front_defended.output["pcap"], sample_id=sample_ids,
+                  rep_id=0)
+
+def collect_front_baseline_single__all_input(wildcards):
+    input_dir = checkpoints.url_dependencies__csv.get(**wildcards).output[0]
+    sample_ids = glob_wildcards(input_dir + "/{sample_id}.csv").sample_id
+
+    return expand(rules.collect_front_baseline.output["pcap"], sample_id=sample_ids,
+                  rep_id=0)
 
 
 rule collect_front_defended__all:
@@ -84,4 +98,16 @@ rule collect_front_baseline__all:
     """Determines the number of URLs samples to be collected and starts the
     collection."""
     input: collect_front_baseline__all_input
+    message: "rule collect_front_baseline__all:\n\tConvenience method for collecting the FRONT baseline samples"
+
+rule collect_front_defended_single__all:
+    """Determines the number of URLs samples to be collected and starts the
+    collection."""
+    input: collect_front_defended_single__all_input
+    message: "rule collect_front_defended__all:\n\tConvenience method for collecting the FRONT defended samples"
+
+rule collect_front_baseline_single__all:
+    """Determines the number of URLs samples to be collected and starts the
+    collection."""
+    input: collect_front_baseline_single__all_input
     message: "rule collect_front_baseline__all:\n\tConvenience method for collecting the FRONT baseline samples"
