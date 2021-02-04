@@ -43,20 +43,34 @@ rule collect_front_baseline:
                 -- --url-dependencies-from {input} > {output.stdout} 2> {log}
         """
 
-rule front_trace_csv:
+# rule front_trace_csv:
+#     input:
+#         dummy_ids=rules.collect_front_defended.output["dummy_ids"],
+#         pcap=rules.collect_front_defended.output["pcap"]
+#     output:
+#         "results/collect/front_defended/{sample_id}/front_cover_traffic.csv"
+#     shell: """\
+#         tshark -r {input.pcap} \
+#             -Y "quic.stream.stream_id in {{$(<{input.dummy_ids})}} \
+#                 or quic.padding_length > 0 or quic.packet_number == 0" \
+#             -Tfields -e frame.time_epoch -e quic.stream.length -e quic.length -e quic.stream.stream_id \
+#             -e quic.padding_length -e udp.srcport -e quic.packet_number \
+#             -E header=y -E separator=\; > {output}
+#         """
+
+rule front_chaff_csv:
     input:
         dummy_ids=rules.collect_front_defended.output["dummy_ids"],
         pcap=rules.collect_front_defended.output["pcap"]
     output:
-        "results/collect/front_defended/{sample_id}/front_cover_traffic.csv"
-    shell: """\
-        tshark -r {input.pcap} \
-            -Y "quic.stream.stream_id in {{$(<{input.dummy_ids})}} \
-                or quic.padding_length > 0 or quic.packet_number == 0" \
-            -Tfields -e frame.time_epoch -e quic.stream.length -e quic.length -e quic.stream.stream_id \
-            -e quic.padding_length -e udp.srcport -e quic.packet_number \
-            -E header=y -E separator=\; > {output}
-        """
+        "results/collect/front_defended/{sample_id}_{rep_id}/front_cover_traffic.csv"
+    run:
+        import pandas as pd
+        from pyqcd.parse import parse_quic
+
+        pd.DataFrame(
+            parse_quic.parse_chaff_traffic(str(input.pcap), str(input.dummy_ids))
+        ).to_csv(str(output), header=True, index=False)
 
 
 def collect_front_defended__all_input(wildcards):
