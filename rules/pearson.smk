@@ -34,8 +34,10 @@ rule pearson_test:
         schedule="results/collect/front_defended/{sample_id}_{rep_id}/schedule.csv"
     output:
         stdout="results/pearson/front/{sample_id}_{rep_id}/stdout_test.txt",
-        stderr="results/pearson/front/{sample_id}_{rep_id}/stderr_test.txt"
+        plot="results/pearson/front/{sample_id}_{rep_id}/rolling_pearson_all.png"
+    log:
+        "results/pearson/front/{sample_id}_{rep_id}/stderr_test.txt"
     shell: """\
-        python3 -m pyqcd.pearson.measure_pearson_full \
-        -- {input.defended} {input.baseline} {input.schedule} > {output.stdout} 2> {output.stderr}
+        python3 -m pyqcd.pearson.measure_pearson_full --output-file {output.plot} \
+        -- {input.defended} {input.baseline} {input.schedule} > {output.stdout} 2> {log}
         """

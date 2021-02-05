@@ -100,16 +100,31 @@ def main(inputs, output_file):
     target_out = make_target_trace(baseline_out, schedule_out)
     target_in = make_target_trace(baseline_in, schedule_in)
     print(target_out, target_in)
-    df_tx = pd.concat([outgoing, target_out], keys=["Defended", "Target"], axis=1).fillna(0)
-    df_rx = pd.concat([-incoming, -target_in], keys=["Defended", "Target"], axis=1).fillna(0)
-    bins_rx = df_rx.index.values.astype(float)
-    bins_tx = df_tx.index.values.astype(float)
-    # TODO resample here
 
+    # TODO resample here
     outgoing = outgoing.resample("5ms", origin="epoch").sum()
     incoming = incoming.resample("5ms", origin="epoch").sum()
     target_out = target_out.resample("5ms", origin="epoch").sum()
     target_in = target_in.resample("5ms", origin="epoch").sum()
+
+    print("###")
+    last = outgoing.index[-1]
+    print(last)
+    target_out = target_out[target_out.index <= last]
+    last = incoming.index[-1]
+    print(last)
+    target_in = target_in[target_in.index <= last]
+    print("###")
+
+    print("\nresampled traces: ")
+    print(outgoing, "\n", incoming)
+    print(target_out, "\n", target_in)
+
+    # concat traces
+    df_tx = pd.concat([outgoing, target_out], keys=["Defended", "Target"], axis=1).fillna(0)
+    df_rx = pd.concat([-incoming, -target_in], keys=["Defended", "Target"], axis=1).fillna(0)
+    bins_rx = df_rx.index.values.astype(float)
+    bins_tx = df_tx.index.values.astype(float)
 
     # measure pearson
     (rolling_tx, rolling_rx) = rolling_pearson(df_tx, df_rx)
@@ -126,7 +141,7 @@ def main(inputs, output_file):
     ax[1].set(xlabel='ms', ylabel='Pearson r TX')
     rolling_rx.plot(x=bins_rx, ax=ax[2])
     ax[2].set(xlabel='ms', ylabel='Pearson r RX')
-    f.savefig("results/pearson/front/007_0/full_test.png", dpi=300, bbox_inches="tight")
+    f.savefig(output_file, dpi=300, bbox_inches="tight")
     # f.show()
 
     r, p = stats.pearsonr(df_tx["Defended"], df_tx["Target"])
