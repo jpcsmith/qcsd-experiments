@@ -1,14 +1,14 @@
 rule pearson_front_dummy:
     """Measures Pearson correlation of defended trace with the dummy schedule"""
     input:
-        defended="results/collect/front_defended/{sample_id}/front_cover_traffic.csv",
-        baseline="results/collect/front_defended/{sample_id}/schedule.csv",
-        dummy_ids="results/collect/front_defended/{sample_id}/dummy_streams.txt"
+        defended="results/collect/front_defended/{sample_id}_{rep_id}/front_cover_traffic.csv",
+        baseline="results/collect/front_defended/{sample_id}_{rep_id}/schedule.csv",
+        dummy_ids="results/collect/front_defended/{sample_id}_{rep_id}/dummy_streams.txt"
     output:
-        plot="results/pearson/front/{sample_id}/rolling_pearson.png",
-        stdout="results/pearson/front/{sample_id}/stdout.txt"
+        plot="results/pearson/front/{sample_id}_{rep_id}/rolling_pearson.png",
+        stdout="results/pearson/front/{sample_id}_{rep_id}/stdout.txt"
     log:
-        "results/pearson/front/{sample_id}/stderr.txt"
+        "results/pearson/front/{sample_id}_{rep_id}/stderr.txt"
     shell: """\
         python3 -m pyqcd.pearson.measure_pearson --output-file {output.plot} \
         -- {input.defended} {input.baseline} {input.dummy_ids} > {output.stdout} 2> {log}
@@ -25,3 +25,17 @@ rule pearson_front_dummy__all:
     Pearson correaltion for the dummy traffic for each."""
     input: pearson_front_dummy__all_input
     message: "rule pearson_front_dummy__all:\n\tMeasure all traces."
+
+rule pearson_test:
+    """Testing"""
+    input:
+        defended="results/collect/front_defended/{sample_id}_{rep_id}/front_traffic.csv",
+        baseline="results/collect/front_baseline/{sample_id}_{rep_id}/trace.csv",
+        schedule="results/collect/front_defended/{sample_id}_{rep_id}/schedule.csv"
+    output:
+        stdout="results/pearson/front/{sample_id}_{rep_id}/stdout_test.txt",
+        stderr="results/pearson/front/{sample_id}_{rep_id}/stderr_test.txt"
+    shell: """\
+        python3 -m pyqcd.pearson.measure_pearson_full \
+        -- {input.defended} {input.baseline} {input.schedule} > {output.stdout} 2> {output.stderr}
+        """
