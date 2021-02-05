@@ -194,3 +194,28 @@ def parse_chaff_traffic(pcap_file: str, chaff_streams_file: str) \
         ))
 
     return results
+
+
+class AllTrafficResult(NamedTuple):
+    """Structured packet from trace."""
+    timestamp: float
+    packet_number: int
+    is_outgoing: bool
+    packet_length: int
+
+
+def parse_all_traffic(pcap_file: str):
+    """Parse the full trace from pcap_file. Details of all packets are returned
+    """
+
+    results = []
+
+    for packet in parse_quic_packets(pcap_file):
+        results.append(AllTrafficResult(
+            timestamp=packet.timestamp,
+            packet_number=packet.packet_number,
+            is_outgoing=packet.is_outgoing(),
+            packet_length=packet.packet_length,
+        ))
+
+    return results
