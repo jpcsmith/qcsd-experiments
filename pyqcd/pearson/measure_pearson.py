@@ -2,7 +2,7 @@
 """Usage: module [options] -- [INPUTS]...
 
 Measures the distance between two dummy traces using Pearson correlation.
-Traces are sampled into 1ms intervals.
+Traces are sampled into 5ms intervals.
 
 Inputs:
     Defended Trace
@@ -25,37 +25,26 @@ import scipy.stats as stats
 import doceasy
 
 
-def load_cover_trace(filename, dummy_streams):
-    data = pd.read_csv(filename, delimiter=";")
-    data = data.sort_values(by="frame.time_epoch").reset_index(drop=True)
-
-    dummy_ids = pd.read_csv(dummy_streams, header=None, names=["id"])["id"]
+def load_cover_trace(filename):
+    data = pd.read_csv(filename)
+    data = data.sort_values(by="timestamp").reset_index(drop=True)
 
     # Ensure that the trace starts with packet number zero
-    assert int(data.loc[0, "quic.packet_number"]) == 0
-    start_time = data.loc[0, "frame.time_epoch"]
+    assert data.loc[0, "packet_number"] == 0
+    data["timestamp"] = (data["timestamp"] - data.loc[0, "timestamp"]) * 1e3
 
-    # Drop all packets with packet number zero
-    # as they're only there for the starting time
-    data = data[data["quic.packet_number"] != 0].reset_index(drop=True)
+    # Drop all packets with packet number zero as they're only there for the starting time
+    data = data[data["packet_number"] != 0].reset_index(drop=True)
 
-    size_if_dummy = lambda v: int(v) if (int(v) in dummy_ids) else 0
-    data["length"] = data["quic.stream.length"].map(
-        lambda x: 0 if x is np.nan else sum(size_if_dummy(v) for v in x.split(","))
-    )
-    data["length"] += data["quic.padding_length"].fillna(0)
-    data["length"] = data["length"].astype(int)
-    data["is_outgoing"] = ~data["udp.srcport"].isin((443, 80))
-
-    data["time"] = (data["frame.time_epoch"] - start_time) * 1e3
-
-    data = data[["time", "length", "is_outgoing"]]
-
+    data = data.rename(columns={"timestamp": "time",
+                                "chaff_traffic": "length"})
+    data = data[["time", "length", "other_traffic",
+                 "packet_length", "is_outgoing"]]
     data["time"] = pd.to_datetime(data["time"], unit="ms")
-    data = data.groupby("is_outgoing").resample(
-                                        "1ms", on="time", origin="epoch"
-                                        )["length"].sum()
-    return data.xs(True), data.xs(False)
+
+    data = data.groupby("is_outgoing").resample("5ms", on="time", origin="epoch").sum().drop(columns="is_outgoing")
+    # data["time"] = (data["time"]- dt.datetime(1970,1,1)).dt.total_seconds()
+    return data.xs(True)["length"], data.xs(False)["length"]
 
 
 def load_schedule(filename):
@@ -67,7 +56,7 @@ def load_schedule(filename):
     data["time"] = pd.to_datetime(data["time"], unit="s")
 
     data = data.groupby("is_outgoing").resample(
-                                        "1ms", on="time", origin="epoch"
+                                        "5ms", on="time", origin="epoch"
                                         )["length"].sum()
 
     return data.xs(True), data.xs(False)
@@ -77,46 +66,36 @@ def main(inputs, output_file):
     """Measure Pearson correlation between two traces.
         Outputs graph of rolling window Pearson."""
 
-    (outgoing, incoming) = load_cover_trace(inputs[0], inputs[2])
+    (outgoing, incoming) = load_cover_trace(inputs[0])
     (baseline_out, baseline_in) = load_schedule(inputs[1])
 
-    r_window_size = 100
+    r_window_size = 25
 
-    df = pd.concat(
-                [outgoing, baseline_out],
-                keys=["Defended", "Baseline"],
-                axis=1
-            ).fillna(0)
-    bins = np.arange(len(df))
+    df_tx = pd.concat([outgoing, baseline_out], keys=["Defended", "Baseline"], axis=1).fillna(0)
+    df_rx = pd.concat([-incoming, -baseline_in], keys=["Defended", "Baseline"], axis=1).fillna(0)
+    bins_rx = df_rx.index.values.astype(float)
+    bins_tx = df_tx.index.values.astype(float)
 
-    rolling_r = df['Defended'].rolling(
-                                window=r_window_size,
-                                center=True
-                                ).corr(df['Baseline'])
-    # display(df)
-    # display(rolling_r)
+    rolling_rx = df_rx['Defended'].rolling(window=r_window_size, center=True).corr(df_rx['Baseline'])
+    rolling_tx = df_tx['Defended'].rolling(window=r_window_size, center=True).corr(df_tx['Baseline'])
 
-    f, ax = plt.subplots(2, 1, sharex=True, figsize=(14, 6))
-    ax[0].scatter(x=bins,
-                  y=df["Defended"],
-                  label="Defended",
-                  s=1.3,
-                  marker='1'
-                  )
-    ax[0].scatter(x=bins,
-                  y=df["Baseline"],
-                  label="Baseline",
-                  s=1.3,
-                  marker='2'
-                  )
+    f, ax = plt.subplots(3, 1, sharex=True, figsize=(14, 6))
+    ax[0].scatter(x=df_rx.index, y=df_rx["Defended"], label="Defended", s=1.0, marker='1')
+    ax[0].scatter(x=df_rx.index, y=df_rx["Baseline"], label="Baseline", s=1.0, marker='2')
+    ax[0].scatter(x=df_tx.index, y=df_tx["Defended"], label="Defended", s=1.0, marker='1')
+    ax[0].scatter(x=df_tx.index, y=df_tx["Baseline"], label="Baseline", s=1.0, marker='2')
     ax[0].set(xlabel='ms', ylabel='packet size')
     ax[0].legend()
-    rolling_r.plot(ax=ax[1])
-    ax[1].set(xlabel='ms', ylabel='Pearson r')
+    rolling_tx.plot(x=bins_tx, ax=ax[1])
+    ax[1].set(xlabel='ms', ylabel='Pearson r TX')
+    rolling_rx.plot(x=bins_rx, ax=ax[2])
+    ax[2].set(xlabel='ms', ylabel='Pearson r RX')
     f.savefig(output_file, dpi=300, bbox_inches="tight")
 
-    r, p = stats.pearsonr(df["Defended"], df["Baseline"])
-    print(f"Scipy computed Pearson r: {r} and p-value: {p}")
+    r, p = stats.pearsonr(df_tx["Defended"], df_tx["Baseline"])
+    print(f"Scipy computed Pearson r TX: {r} and p-value: {p}")
+    r, p = stats.pearsonr(df_rx["Defended"], df_rx["Baseline"])
+    print(f"Scipy computed Pearson r RX: {r} and p-value: {p}")
 
 
 if __name__ == "__main__":
