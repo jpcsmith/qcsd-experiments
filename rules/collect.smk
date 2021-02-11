@@ -6,10 +6,36 @@ wildcard_constraints:
     sample_id="\d+",
     rep_id="\d+"
 
+rule create_chaff_schedule:
+    """Creates a schedule for chaff traffic sampled from Rayleigh."""
+    params:
+        seed=0xdeadbeef
+    resources:
+        csdef_config="../neqo-qcd/neqo-csdef/src/config.toml"
+    output:
+        schedule="results/collect/front_defended/{sample_id}_{rep_id}/chaff_schedule.csv",
+        rnd_seed="results/collect/front_defended/{sample_id}_{rep_id}/rnd_seed.txt"
+    run:
+        from pyqcd.rayleigh import sample_rayleigh
+        import toml
+        with open(resources.csdef_config, "r") as f:
+            front_config=toml.loads(f.read())['front_defence']
+        with open(output.rnd_seed, "w") as flog:
+            flog.write(f'{params.seed}\n')
+        sample_rayleigh.create_trace( seed=int(params.seed),
+                                      N_TX=front_config['n_client_packets'],
+                                      N_RX=front_config['n_server_packets'],
+                                      W_min=front_config['peak_minimum'],
+                                      W_max=front_config['peak_maximum'],
+                                      size=front_config['packet_size'],
+                                      outcsv=output.schedule
+                                     )
+
 rule collect_front_defended:
     """Collect defended QUIC traces shaped with the FRONT defence."""
     input:
-        "results/determine-url-deps/dependencies/{sample_id}.csv"
+        url_dep="results/determine-url-deps/dependencies/{sample_id}.csv",
+        schedule="results/collect/front_defended/{sample_id}_{rep_id}/chaff_schedule.csv"
     output:
         stdout="results/collect/front_defended/{sample_id}_{rep_id}/stdout.txt",
         dummy_ids="results/collect/front_defended/{sample_id}_{rep_id}/dummy_streams.txt",
@@ -20,9 +46,9 @@ rule collect_front_defended:
     resources:
         cap_iface=1
     shell: """\
-        CSDEF_DUMMY_ID={output.dummy_ids} CSDEF_DUMMY_SCHEDULE={output.sampled_schedule} \
+        CSDEF_DUMMY_ID={output.dummy_ids} CSDEF_INPUT_TRACE={input.schedule} CSDEF_DUMMY_SCHEDULE={output.sampled_schedule} \
         RUST_LOG=neqo_transport=info,debug python3 -m pyqcd.collect.neqo_capture_client \
-            --pcap-file {output.pcap} -- --url-dependencies-from {input} \
+            --pcap-file {output.pcap} -- --url-dependencies-from {input.url_dep} \
             > {output.stdout} 2> {log}
         """
 
