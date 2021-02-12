@@ -15,6 +15,8 @@ Options:
     --output-file filename
         Save the dummy packets trace and rolling window pearson graph
         to filename.
+    --output-json filename
+        Save the pearsons results to json file
     --window-size int
         Size of the rolling window used to calculate Pearson's correlation
         in the traces.
@@ -80,7 +82,7 @@ def rolling_pearson(df_tx, df_rx):
     return rolling_tx, rolling_rx
 
 
-def main(inputs, output_file):
+def main(inputs, output_plot, output_json):
     """Loads two traces, build target and measure pearson
     """
 
@@ -141,18 +143,34 @@ def main(inputs, output_file):
     ax[1].set(xlabel='ms', ylabel='Pearson r TX')
     rolling_rx.plot(x=bins_rx, ax=ax[2])
     ax[2].set(xlabel='ms', ylabel='Pearson r RX')
-    f.savefig(output_file, dpi=300, bbox_inches="tight")
+    f.savefig(output_plot, dpi=300, bbox_inches="tight")
     # f.show()
 
-    r, p = stats.pearsonr(df_tx["Defended"], df_tx["Target"])
+    r_tx, p_tx = stats.pearsonr(df_tx["Defended"], df_tx["Target"])
     print(f"Scipy computed Pearson r TX: {r} and p-value: {p}")
-    r, p = stats.pearsonr(df_rx["Defended"], df_rx["Target"])
+    r_rx, p_rx = stats.pearsonr(df_rx["Defended"], df_rx["Target"])
     print(f"Scipy computed Pearson r RX: {r} and p-value: {p}")
+
+    # save results as json
+    data = {
+        'TX': {
+            'stats': (r_tx, p_tx),
+            'rolling': list(rolling_tx),
+        },
+        'RX': {
+            'stats': (r_rx, p_rx),
+            'rolling': list(rolling_rx),
+        }
+    }
+
+    with open(output_json, "w") as f:
+        json.dump(data, f)
 
 
 
 if __name__ == "__main__":
     main(**doceasy.doceasy(__doc__, doceasy.Schema({
         "INPUTS": [str],
-        "--output-file": doceasy.Or(None, str)
+        "--output-plot": doceasy.Or(None, str),
+        "--output-json": str,
     }, ignore_extra_keys=True)))

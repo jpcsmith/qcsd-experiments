@@ -6,11 +6,12 @@ rule pearson_front_dummy:
         dummy_ids="results/collect/front_defended/{sample_id}_{rep_id}/dummy_streams.txt"
     output:
         plot="results/pearson/front/{sample_id}_{rep_id}/rolling_pearson.png",
+        json="results/pearson/front/{sample_id}_{rep_id}/res.json",
         stdout="results/pearson/front/{sample_id}_{rep_id}/stdout.txt"
     log:
         "results/pearson/front/{sample_id}_{rep_id}/stderr.txt"
     shell: """\
-        python3 -m pyqcd.pearson.measure_pearson --output-file {output.plot} \
+        python3 -m pyqcd.pearson.measure_pearson --output-plot {output.plot} --output-json {output.json} \
         -- {input.defended} {input.baseline} {input.dummy_ids} > {output.stdout} 2> {log}
         """
 
@@ -18,7 +19,8 @@ def pearson_front_dummy__all_input(wildcards):
     input_dir = checkpoints.url_dependencies__csv.get(**wildcards).output[0]
     sample_ids = glob_wildcards(input_dir + "/{sample_id}.csv").sample_id
 
-    return expand(rules.pearson_front_dummy.output["plot"], sample_id=sample_ids)
+    return expand(rules.pearson_front_dummy.output["plot"], sample_id=sample_ids,
+                   rep_id=range(config["collect_reps"]))
 
 rule pearson_front_dummy__all:
     """Determine the number of samples collected and measures the
@@ -26,8 +28,8 @@ rule pearson_front_dummy__all:
     input: pearson_front_dummy__all_input
     message: "rule pearson_front_dummy__all:\n\tMeasure all traces."
 
-rule pearson_test:
-    """Testing"""
+rule pearson_front_full:
+    """Measures Pearson correlation of defended trace with the full trace of the baseline"""
     input:
         defended="results/collect/front_defended/{sample_id}_{rep_id}/front_traffic.csv",
         baseline="results/collect/front_baseline/{sample_id}_{rep_id}/trace.csv",

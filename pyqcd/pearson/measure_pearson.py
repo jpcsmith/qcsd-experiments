@@ -10,9 +10,11 @@ Inputs:
     Dummy ids list
 
 Options:
-    --output-file filename
+    --output-plot filename
         Save the dummy packets trace and rolling window pearson graph
         to filename.
+    --output-json filename
+        Save the pearsons results to json file
     --window-size int
         Size of the rolling window used to calculate Pearson's correlation
         in the traces.
@@ -23,6 +25,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 import scipy.stats as stats
 import doceasy
+import json
 
 
 def load_cover_trace(filename):
@@ -62,7 +65,7 @@ def load_schedule(filename):
     return data.xs(True), data.xs(False)
 
 
-def main(inputs, output_file):
+def main(inputs, output_plot, output_json):
     """Measure Pearson correlation between two traces.
         Outputs graph of rolling window Pearson."""
 
@@ -90,16 +93,32 @@ def main(inputs, output_file):
     ax[1].set(xlabel='ms', ylabel='Pearson r TX')
     rolling_rx.plot(x=bins_rx, ax=ax[2])
     ax[2].set(xlabel='ms', ylabel='Pearson r RX')
-    f.savefig(output_file, dpi=300, bbox_inches="tight")
+    f.savefig(output_plot, dpi=300, bbox_inches="tight")
 
-    r, p = stats.pearsonr(df_tx["Defended"], df_tx["Baseline"])
+    r_tx, p_tx = stats.pearsonr(df_tx["Defended"], df_tx["Baseline"])
     print(f"Scipy computed Pearson r TX: {r} and p-value: {p}")
-    r, p = stats.pearsonr(df_rx["Defended"], df_rx["Baseline"])
+    r_rx, p_rx = stats.pearsonr(df_rx["Defended"], df_rx["Baseline"])
     print(f"Scipy computed Pearson r RX: {r} and p-value: {p}")
+
+    # save results as json
+    data = {
+        'TX': {
+            'stats': (r_tx, p_tx),
+            'rolling': list(rolling_tx),
+        },
+        'RX': {
+            'stats': (r_rx, p_rx),
+            'rolling': list(rolling_rx),
+        }
+    }
+
+    with open(output_json, "w") as f:
+        json.dump(data, f)
 
 
 if __name__ == "__main__":
     main(**doceasy.doceasy(__doc__, doceasy.Schema({
         "INPUTS": [str],
-        "--output-file": doceasy.Or(None, str)
+        "--output-plot": doceasy.Or(None, str),
+        "--output-json": str,
     }, ignore_extra_keys=True)))
