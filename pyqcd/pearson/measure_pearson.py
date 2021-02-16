@@ -96,9 +96,9 @@ def main(inputs, output_plot, output_json):
     f.savefig(output_plot, dpi=300, bbox_inches="tight")
 
     r_tx, p_tx = stats.pearsonr(df_tx["Defended"], df_tx["Baseline"])
-    print(f"Scipy computed Pearson r TX: {r} and p-value: {p}")
+    print(f"Scipy computed Pearson r TX: {r_tx} and p-value: {p_tx}")
     r_rx, p_rx = stats.pearsonr(df_rx["Defended"], df_rx["Baseline"])
-    print(f"Scipy computed Pearson r RX: {r} and p-value: {p}")
+    print(f"Scipy computed Pearson r RX: {r_rx} and p-value: {p_rx}")
 
     # save results as json
     data = {
