@@ -54,6 +54,14 @@ def pearson_aggregated_input(wildcards):
     return expand(rules.pearson_front_dummy.output["json"], sample_id=s_ids,
             rep_id=range(max([int(r)+1 for r in s_rep])))
 
+def pearson_aggregated_full_input(wildcards):
+    collect_dir = rules.collect_front_baseline.output[3] # points to the pcap
+    s_ids = glob_wildcards(collect_dir).sample_id
+    s_rep = glob_wildcards(collect_dir).rep_id
+    
+
+    return expand(rules.pearson_front_full.output["json"], sample_id=s_ids,
+            rep_id=range(max([int(r)+1 for r in s_rep])))
 
 rule pearson_front_dummy_aggregated:
     """Aggregates results from pearson_front_dummy and pearson_front_full into one statistic"""
@@ -62,11 +70,18 @@ rule pearson_front_dummy_aggregated:
         plot = "results/pearson/front/aggregate/pearson_distribution.png",
         stdout = "results/pearson/front/aggregate/stdout.txt"
     log: "results/pearson/front/aggregate/stderr.txt"
-    # run:
-    # # Must change this to shell because of spawning process
-    #     from pyqcd.pearson import aggregate_pearson
+    shell: """\
+        python3 -m pyqcd.pearson.aggregate_pearson --output-plot {output.plot} -- {input} 
+        > {output.stdout} 2> {log}\
+        """
 
-    #     aggregate_pearson.plot_dummy_distribution(input, output)
+rule pearson_front_full_aggregated:
+    """Aggregates results from pearson_front_full into one statistic"""
+    input: pearson_aggregated_input
+    output: 
+        plot = "results/pearson/front/aggregate/pearson_distribution_full.png",
+        stdout = "results/pearson/front/aggregate/stdout_full.txt"
+    log: "results/pearson/front/aggregate/stderr_full.txt"
     shell: """\
         python3 -m pyqcd.pearson.aggregate_pearson --output-plot {output.plot} -- {input} 
         > {output.stdout} 2> {log}\

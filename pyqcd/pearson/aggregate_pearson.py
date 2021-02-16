@@ -40,8 +40,6 @@ def plot_normal(data, ax, title):
 
 
 def main(inputs, output_plot):
-    print("inputs: ", inputs)
-    print("output: ", output_plot)
     # load data
     N = len(inputs)
     pearsons_TX = np.array([])
@@ -49,12 +47,10 @@ def main(inputs, output_plot):
     for path in inputs:
         with open(path, "r") as json_file:
             data = json.load(json_file)
-            print(data['TX']['stats'])
             (r_tx, _) = data['TX']['stats']
             (r_rx, _) = data['RX']['stats']
             pearsons_TX = np.append(pearsons_TX, r_tx)
             pearsons_RX = np.append(pearsons_RX, r_rx)
-            print("***")
 
     f, ax = plt.subplots(3, 1, figsize=(10, 12))
     # plot dummy TX
