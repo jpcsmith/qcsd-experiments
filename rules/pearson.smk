@@ -46,33 +46,33 @@ rule pearson_front_full:
         """
 
 def pearson_aggregated_input(wildcards):
-    input_dir = checkpoints.url_dependencies__csv.get(**wildcards).output[0]
-    sample_ids = glob_wildcards(input_dir + "/{sample_id}.csv").sample_id
+    collect_dir = rules.collect_front_defended.output[3] # points to the pcap
+    s_ids = glob_wildcards(collect_dir).sample_id
+    s_rep = glob_wildcards(collect_dir).rep_id
+    
 
-    print(checkpoints.collect_front_defended.get(**wildcards).output[0])
-    test_dir = directory(checkpoints.collect_front_defended.get(**wildcards).output[0])
-
-    return expand(rules.pearson_front_dummy.output["json"], sample_id=sample_ids,
-                    rep_id=range(config["collect_reps"]))
+    return expand(rules.pearson_front_dummy.output["json"], sample_id=s_ids,
+            rep_id=range(max([int(r)+1 for r in s_rep])))
 
 
 rule pearson_front_dummy_aggregated:
     input: pearson_aggregated_input
-    message: "hhhhh."
+    output: "results/pearson/front/aggregate/testerino.png"
     run:
-        pearson_aggregated_input(wildcards)
-        # from pyqcd.pearson import aggregate_pearson
+        from pyqcd.pearson import aggregate_pearson
 
-        # aggregate_pearson.testing(input)
+        aggregate_pearson.plot_dummy_distribution(input, output)
 
 rule test_read:
     run:
-        input_dir = checkpoints.url_dependencies__csv.get(**wildcards).output[0]
-        sample_ids = glob_wildcards(input_dir + "/{sample_id}.csv").sample_id
+        # input_dir = checkpoints.url_dependencies__csv.get().output[0]
+        # sample_ids = glob_wildcards(input_dir + "/{sample_id}.csv").sample_id
+        
+        collect_dir = rules.collect_front_defended.output[3]
+        s_ids = glob_wildcards(collect_dir).sample_id
+        s_rep = glob_wildcards(collect_dir).rep_id
+        
 
-        #print(checkpoints.collect_front_defended.get(**wildcards).output[0])
-        #test_dir = directory(checkpoints.collect_front_defended.get(**wildcards).output[0])
-
-        print(expand(rules.pearson_front_dummy.output["json"], sample_id=sample_ids,
-                rep_id=range(config["collect_reps"])))
+        print(expand(rules.pearson_front_dummy.output["json"], sample_id=s_ids,
+                rep_id=range(max([int(r)+1 for r in s_rep]))))
         #print(test_dir)

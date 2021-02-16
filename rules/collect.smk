@@ -31,7 +31,7 @@ rule create_chaff_schedule:
                                       outcsv=output.schedule
                                      )
 
-rule collect_front_defended:
+checkpoint collect_front_defended:
     """Collect defended QUIC traces shaped with the FRONT defence."""
     input:
         url_dep="results/determine-url-deps/dependencies/{sample_id}.csv",
@@ -52,7 +52,7 @@ rule collect_front_defended:
             > {output.stdout} 2> {log}
         """
 
-rule collect_front_baseline:
+checkpoint collect_front_baseline:
     """Collect normal QUIC traces as baseline."""
     input:
         "results/determine-url-deps/dependencies/{sample_id}.csv"
