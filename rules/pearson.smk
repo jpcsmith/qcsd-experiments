@@ -41,7 +41,7 @@ rule pearson_front_full:
     log:
         "results/pearson/front/{sample_id}_{rep_id}/stderr_test.txt"
     shell: """\
-        python3 -m pyqcd.pearson.measure_pearson_full --output-file {output.plot} --output-json {output.json} \
+        python3 -m pyqcd.pearson.measure_pearson_full --output-plot {output.plot} --output-json {output.json} \
         -- {input.defended} {input.baseline} {input.schedule} > {output.stdout} 2> {log}
         """
 
@@ -56,12 +56,21 @@ def pearson_aggregated_input(wildcards):
 
 
 rule pearson_front_dummy_aggregated:
+    """Aggregates results from pearson_front_dummy and pearson_front_full into one statistic"""
     input: pearson_aggregated_input
-    output: "results/pearson/front/aggregate/testerino.png"
-    run:
-        from pyqcd.pearson import aggregate_pearson
+    output: 
+        plot = "results/pearson/front/aggregate/pearson_distribution.png",
+        stdout = "results/pearson/front/aggregate/stdout.txt"
+    log: "results/pearson/front/aggregate/stderr.txt"
+    # run:
+    # # Must change this to shell because of spawning process
+    #     from pyqcd.pearson import aggregate_pearson
 
-        aggregate_pearson.plot_dummy_distribution(input, output)
+    #     aggregate_pearson.plot_dummy_distribution(input, output)
+    shell: """\
+        python3 -m pyqcd.pearson.aggregate_pearson --output-plot {output.plot} -- {input} 
+        > {output.stdout} 2> {log}\
+        """
 
 rule test_read:
     run:
