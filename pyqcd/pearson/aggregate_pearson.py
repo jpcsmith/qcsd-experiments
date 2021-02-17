@@ -18,18 +18,19 @@ from scipy.stats import norm
 import json
 import doceasy
 
-N_BINS_NORMAL = 50
+N_BINS_NORMAL = 150
 
 
 def plot_normal(data, ax, title):
-    ax.set_xlim(left=0.0, right=1.0)
+    ax.set_xlim(left=-0.125, right=1.0)
     count_, bins, _ = ax.hist(data, bins=N_BINS_NORMAL, density=True)
     # fitting curve
     mu, std = norm.fit(data)
+    xs = np.arange(-0.125, 1.0, 0.01)
     ax.plot(
-             bins,
+             xs,
              1/(std * np.sqrt(2 * np.pi)) *
-             np.exp(-(bins - mu)**2 / (2 * std**2)),
+             np.exp(-(xs - mu)**2 / (2 * std**2)),
              linewidth=2, color='r', label=f'$\mu={mu:.3f}$\n$stdev={std:.3f}$'
             )
     ax.axvline(mu, color='k', linestyle='dashed', linewidth=1)
@@ -51,6 +52,12 @@ def main(inputs, output_plot):
             (r_rx, _) = data['RX']['stats']
             pearsons_TX = np.append(pearsons_TX, r_tx)
             pearsons_RX = np.append(pearsons_RX, r_rx)
+
+    # cleanup values
+    pearsons_TX = pearsons_TX[~np.isnan(pearsons_TX)]
+    pearsons_RX = pearsons_RX[~np.isnan(pearsons_RX)]
+    assert (not np.isnan(pearsons_TX).any())
+    assert (not np.isnan(pearsons_RX).any())
 
     f, ax = plt.subplots(3, 1, figsize=(10, 12))
     # plot dummy TX
