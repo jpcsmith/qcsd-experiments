@@ -8,10 +8,14 @@ rule pearson_front_dummy:
         plot="results/pearson/front/{sample_id}_{rep_id}/rolling_pearson.png",
         json="results/pearson/front/{sample_id}_{rep_id}/res.json",
         stdout="results/pearson/front/{sample_id}_{rep_id}/stdout.txt"
+    params:
+        window=25, # int
+        rate=10.0 # float
     log:
         "results/pearson/front/{sample_id}_{rep_id}/stderr.txt"
     shell: """\
         python3 -m pyqcd.pearson.measure_pearson --output-plot {output.plot} --output-json {output.json} \
+        --window-size {params.window} --sample-rate {params.rate} \
         -- {input.defended} {input.baseline} {input.dummy_ids} > {output.stdout} 2> {log}
         """
 
@@ -38,6 +42,9 @@ rule pearson_front_full:
         stdout="results/pearson/front/{sample_id}_{rep_id}/stdout_test.txt",
         json="results/pearson/front/{sample_id}_{rep_id}/res_full.json",
         plot="results/pearson/front/{sample_id}_{rep_id}/rolling_pearson_all.png"
+    params:
+        window=25, # int
+        rate=10.0 # float
     log:
         "results/pearson/front/{sample_id}_{rep_id}/stderr_test.txt"
     shell: """\
@@ -46,7 +53,7 @@ rule pearson_front_full:
         """
 
 def pearson_aggregated_input(wildcards):
-    collect_dir = rules.pearson_front_dummy.output[1] # points to the pcap
+    collect_dir = rules.pearson_front_dummy.output[1] # points to the json
     s_ids = glob_wildcards(collect_dir).sample_id
     s_rep = glob_wildcards(collect_dir).rep_id
     
@@ -55,7 +62,7 @@ def pearson_aggregated_input(wildcards):
             rep_id=s_rep)
 
 def pearson_aggregated_full_input(wildcards):
-    collect_dir = rules.collect_front_baseline.output[3] # points to the pcap
+    collect_dir = rules.pearson_front_full.output[1] # points to the json
     s_ids = glob_wildcards(collect_dir).sample_id
     s_rep = glob_wildcards(collect_dir).rep_id
     

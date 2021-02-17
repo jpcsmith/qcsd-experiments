@@ -18,6 +18,8 @@ Options:
     --window-size int
         Size of the rolling window used to calculate Pearson's correlation
         in the traces.
+    --sample-rate float
+        rate of sampling packets in ms
 """
 
 import pandas as pd
@@ -28,7 +30,7 @@ import doceasy
 import json
 
 
-def load_cover_trace(filename):
+def load_cover_trace(filename, rate):
     data = pd.read_csv(filename)
     data = data.sort_values(by="timestamp").reset_index(drop=True)
 
@@ -45,34 +47,37 @@ def load_cover_trace(filename):
                  "packet_length", "is_outgoing"]]
     data["time"] = pd.to_datetime(data["time"], unit="ms")
 
-    data = data.groupby("is_outgoing").resample("5ms", on="time", origin="epoch").sum().drop(columns="is_outgoing")
+    # sampling rate
+    sampling = str(rate)+"ms"
+    data = data.groupby("is_outgoing").resample(sampling, on="time", origin="epoch").sum().drop(columns="is_outgoing")
     # data["time"] = (data["time"]- dt.datetime(1970,1,1)).dt.total_seconds()
     return data.xs(True)["length"], data.xs(False)["length"]
 
 
-def load_schedule(filename):
+def load_schedule(filename, rate):
     data = pd.read_csv(filename, header=None, names=["time", "length"])
     data["is_outgoing"] = data["length"] > 0
     data["length"] = data["length"].abs()
     data = data.sort_values(by="time").reset_index(drop=True)
 
     data["time"] = pd.to_datetime(data["time"], unit="s")
-
+    # sampling rate
+    sampling = str(rate)+"ms"
     data = data.groupby("is_outgoing").resample(
-                                        "5ms", on="time", origin="epoch"
+                                        sampling, on="time", origin="epoch"
                                         )["length"].sum()
 
     return data.xs(True), data.xs(False)
 
 
-def main(inputs, output_plot, output_json):
+def main(inputs, output_plot, output_json, window_size=25, sample_rate=5):
     """Measure Pearson correlation between two traces.
         Outputs graph of rolling window Pearson."""
 
-    (outgoing, incoming) = load_cover_trace(inputs[0])
-    (baseline_out, baseline_in) = load_schedule(inputs[1])
+    (outgoing, incoming) = load_cover_trace(inputs[0], float(sample_rate))
+    (baseline_out, baseline_in) = load_schedule(inputs[1], float(sample_rate))
 
-    r_window_size = 25
+    r_window_size = int(window_size)
 
     df_tx = pd.concat([outgoing, baseline_out], keys=["Defended", "Baseline"], axis=1).fillna(0)
     df_rx = pd.concat([-incoming, -baseline_in], keys=["Defended", "Baseline"], axis=1).fillna(0)
@@ -121,4 +126,6 @@ if __name__ == "__main__":
         "INPUTS": [str],
         "--output-plot": doceasy.Or(None, str),
         "--output-json": str,
+        "--window-size": doceasy.Or(None, str),
+        "--sample-rate": doceasy.Or(None, str)
     }, ignore_extra_keys=True)))
