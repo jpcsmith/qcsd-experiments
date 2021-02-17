@@ -83,6 +83,7 @@ rule front_baseline_csv:
         ).to_csv(str(output), header=True, index=False)
 
 rule front_trace_csv:
+    """Parses all packets in the pcap"""
     input:
         pcap=rules.collect_front_defended.output["pcap"]
     output:
@@ -96,6 +97,7 @@ rule front_trace_csv:
         ).to_csv(str(output), header=True, index=False)
 
 rule front_chaff_csv:
+    """Extracts the chaff traffic from a pcap of defended trace and saves it in a csv"""
     input:
         dummy_ids=rules.collect_front_defended.output["dummy_ids"],
         pcap=rules.collect_front_defended.output["pcap"]
