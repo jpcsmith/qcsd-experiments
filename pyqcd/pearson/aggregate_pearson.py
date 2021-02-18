@@ -10,15 +10,27 @@ Inputs:
 Options:
     --output-plot filename
         Save the distribution of pearsons values to filename
+    --output-json filename
+        Save aggregated results to json file
 """
 
 import numpy as np
 from matplotlib import pyplot as plt
 from scipy.stats import norm
+import collections.abc
 import json
 import doceasy
 
 N_BINS_NORMAL = 150
+
+
+def update(d, u):
+    for k, v in u.items():
+        if isinstance(v, collections.abc.Mapping):
+            d[k] = update(d.get(k, {}), v)
+        else:
+            d[k] = v
+    return d
 
 
 def plot_normal(data, ax, title):
@@ -42,43 +54,85 @@ def plot_normal(data, ax, title):
     ax.grid()
 
 
-def main(inputs, output_plot):
+def main(inputs, output_plot, output_json):
     # load data
     N = len(inputs)
-    pearsons_TX = np.array([])
-    pearsons_RX = np.array([])
+    pearsons_TX = {}
+    pearsons_RX = {}
     for path in inputs:
         (sample_id, rep_id) = path.split(sep='/')[3].split(sep='_')
         with open(path, "r") as json_file:
             data = json.load(json_file)
             (r_tx, _) = data['TX']['stats']
             (r_rx, _) = data['RX']['stats']
-            pearsons_TX = np.append(pearsons_TX, r_tx)
-            pearsons_RX = np.append(pearsons_RX, r_rx)
+            pearsons_TX = update(pearsons_TX, {sample_id: {rep_id: r_tx}})
+            pearsons_RX = update(pearsons_RX, {sample_id: {rep_id: r_rx}})
+            # pearsons_TX = np.append(pearsons_TX, r_tx)
+            # pearsons_RX = np.append(pearsons_RX, r_rx)
+
+
+    # print(pearsons_TX)
+    # print("*****************")
+    # print(pearsons_RX)
+    # print("*****************\n")
+
+    tx_means = np.array([])
+    rx_means = np.array([])
+    for (s_id, reps) in pearsons_TX.items():
+        # print("Sample: ", s_id)
+        # for (rep_id, r) in reps.items():
+        #     print(f"\t{rep_id}:\t{r:.4f}")
+        avg = np.nanmean(list(reps.values()))
+        tx_means = np.append(tx_means, avg)
+        # count how many non-nan values
+        r_count = (~np.isnan(list(reps.values()))).sum()
+        pearsons_TX[s_id] = {'count': r_count, 'mean': avg, 'reps': reps}
+
+    # print(pearsons_TX)
+    # print("*****************")
+    # print(tx_means)
+
+    for (s_id, reps) in pearsons_RX.items():
+        # print("Sample: ", s_id)
+        # for (rep_id, r) in reps.items():
+        #     print(f"\t{rep_id}:\t{r:.4f}")
+        avg = np.nanmean(list(reps.values()))
+        rx_means = np.append(rx_means, avg)
+        # count how many non-nan values
+        r_count = (~np.isnan(list(reps.values()))).sum()
+        pearsons_RX[s_id] = {'count': r_count, 'mean': avg, 'reps': reps}
+
+    # print(pearsons_RX)
+    # print("#################")
+    # print(rx_means)
 
     # cleanup values
-    pearsons_TX = pearsons_TX[~np.isnan(pearsons_TX)]
-    pearsons_RX = pearsons_RX[~np.isnan(pearsons_RX)]
-    assert (not np.isnan(pearsons_TX).any())
-    assert (not np.isnan(pearsons_RX).any())
+    tx_means = tx_means[~np.isnan(tx_means)]
+    rx_means = rx_means[~np.isnan(rx_means)]
+    assert (not np.isnan(tx_means).any())
+    assert (not np.isnan(rx_means).any())
 
     f, ax = plt.subplots(3, 1, figsize=(10, 12))
     # plot dummy TX
-    plot_normal(pearsons_TX, ax[0], 'client -> server chaff')
+    plot_normal(tx_means, ax[0], 'client -> server chaff')
     # plot dummy RX
-    plot_normal(pearsons_RX, ax[1], 'server -> client chaff')
+    plot_normal(rx_means, ax[1], 'server -> client chaff')
     # plot all
-    plot_normal(np.append(pearsons_RX, pearsons_TX),
+    plot_normal(np.append(rx_means, tx_means),
                 ax[2],
                 "overall chaff packets")
     ax[2].set_xlabel("Pearson score")
 
     f.savefig(output_plot, dpi=300,  bbox_inches="tight")
 
+    # save aggregated data
+
+
 
 if __name__ == "__main__":
     main(**doceasy.doceasy(__doc__, doceasy.Schema({
         "INPUTS": [str],
-        "--output-plot": doceasy.Or(None, str)
+        "--output-plot": doceasy.Or(None, str),
+        "--output-json": str
     }, ignore_extra_keys=True)))
 
