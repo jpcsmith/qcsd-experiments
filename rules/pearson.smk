@@ -75,11 +75,12 @@ rule pearson_front_dummy_aggregated:
     input: pearson_aggregated_input
     output: 
         plot = "results/pearson/front/aggregate/pearson_distribution.png",
+        json = "results/pearson/front/aggregate/res_dummy.json",
         stdout = "results/pearson/front/aggregate/stdout.txt"
     log: "results/pearson/front/aggregate/stderr.txt"
     shell: """\
-        python3 -m pyqcd.pearson.aggregate_pearson --output-plot {output.plot} -- {input} 
-        > {output.stdout} 2> {log}\
+        python3 -m pyqcd.pearson.aggregate_pearson --output-plot {output.plot} --output-json {output.json} \
+        -- {input} > {output.stdout} 2> {log}
         """
 
 rule pearson_front_full_aggregated:
@@ -87,11 +88,12 @@ rule pearson_front_full_aggregated:
     input: pearson_aggregated_input
     output: 
         plot = "results/pearson/front/aggregate/pearson_distribution_full.png",
+        json = "results/pearson/front/aggregate/res_full.json",
         stdout = "results/pearson/front/aggregate/stdout_full.txt"
     log: "results/pearson/front/aggregate/stderr_full.txt"
     shell: """\
-        python3 -m pyqcd.pearson.aggregate_pearson --output-plot {output.plot} -- {input} 
-        > {output.stdout} 2> {log}\
+        python3 -m pyqcd.pearson.aggregate_pearson --output-plot {output.plot} --output-json {output.json} \
+         -- {input} > {output.stdout} 2> {log}
         """
 
 rule test_read:

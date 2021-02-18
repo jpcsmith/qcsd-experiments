@@ -86,7 +86,7 @@ def main(inputs, output_plot, output_json):
         tx_means = np.append(tx_means, avg)
         # count how many non-nan values
         r_count = (~np.isnan(list(reps.values()))).sum()
-        pearsons_TX[s_id] = {'count': r_count, 'mean': avg, 'reps': reps}
+        pearsons_TX[s_id] = {'count': int(r_count), 'mean': avg, 'reps': reps}
 
     # print(pearsons_TX)
     # print("*****************")
@@ -100,11 +100,15 @@ def main(inputs, output_plot, output_json):
         rx_means = np.append(rx_means, avg)
         # count how many non-nan values
         r_count = (~np.isnan(list(reps.values()))).sum()
-        pearsons_RX[s_id] = {'count': r_count, 'mean': avg, 'reps': reps}
+        pearsons_RX[s_id] = {'count': int(r_count), 'mean': avg, 'reps': reps}
 
     # print(pearsons_RX)
     # print("#################")
     # print(rx_means)
+
+    # save aggregated data
+    with open(output_json, "w") as f:
+        json.dump({'TX': pearsons_TX, 'RX': pearsons_RX}, f)
 
     # cleanup values
     tx_means = tx_means[~np.isnan(tx_means)]
@@ -124,9 +128,6 @@ def main(inputs, output_plot, output_json):
     ax[2].set_xlabel("Pearson score")
 
     f.savefig(output_plot, dpi=300,  bbox_inches="tight")
-
-    # save aggregated data
-
 
 
 if __name__ == "__main__":
