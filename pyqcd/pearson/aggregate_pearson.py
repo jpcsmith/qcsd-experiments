@@ -10,15 +10,27 @@ Inputs:
 Options:
     --output-plot filename
         Save the distribution of pearsons values to filename
+    --output-json filename
+        Save aggregated results to json file
 """
 
 import numpy as np
 from matplotlib import pyplot as plt
 from scipy.stats import norm
+import collections.abc
 import json
 import doceasy
 
 N_BINS_NORMAL = 150
+
+
+def update(d, u):
+    for k, v in u.items():
+        if isinstance(v, collections.abc.Mapping):
+            d[k] = update(d.get(k, {}), v)
+        else:
+            d[k] = v
+    return d
 
 
 def plot_normal(data, ax, title):
@@ -42,33 +54,52 @@ def plot_normal(data, ax, title):
     ax.grid()
 
 
-def main(inputs, output_plot):
+def aggregate_and_means(data):
+    means = np.array([])
+    for (s_id, reps) in data.items():
+        avg = np.nanmean(list(reps.values()))
+        means = np.append(means, avg)
+        # count how many non-nan values
+        r_count = (~np.isnan(list(reps.values()))).sum()
+        data[s_id] = {'count': int(r_count), 'mean': avg, 'reps': reps}
+
+    return means, data
+
+
+def main(inputs, output_plot, output_json):
     # load data
     N = len(inputs)
-    pearsons_TX = np.array([])
-    pearsons_RX = np.array([])
+    pearsons_TX = {}
+    pearsons_RX = {}
     for path in inputs:
         (sample_id, rep_id) = path.split(sep='/')[3].split(sep='_')
         with open(path, "r") as json_file:
             data = json.load(json_file)
             (r_tx, _) = data['TX']['stats']
             (r_rx, _) = data['RX']['stats']
-            pearsons_TX = np.append(pearsons_TX, r_tx)
-            pearsons_RX = np.append(pearsons_RX, r_rx)
+            pearsons_TX = update(pearsons_TX, {sample_id: {rep_id: r_tx}})
+            pearsons_RX = update(pearsons_RX, {sample_id: {rep_id: r_rx}})
+
+    (tx_means, pearsons_TX) = aggregate_and_means(pearsons_TX)
+    (rx_means, pearsons_RX) = aggregate_and_means(pearsons_RX)
+
+    # save aggregated data
+    with open(output_json, "w") as f:
+        json.dump({'TX': pearsons_TX, 'RX': pearsons_RX}, f)
 
     # cleanup values
-    pearsons_TX = pearsons_TX[~np.isnan(pearsons_TX)]
-    pearsons_RX = pearsons_RX[~np.isnan(pearsons_RX)]
-    assert (not np.isnan(pearsons_TX).any())
-    assert (not np.isnan(pearsons_RX).any())
+    tx_means = tx_means[~np.isnan(tx_means)]
+    rx_means = rx_means[~np.isnan(rx_means)]
+    assert (not np.isnan(tx_means).any())
+    assert (not np.isnan(rx_means).any())
 
     f, ax = plt.subplots(3, 1, figsize=(10, 12))
     # plot dummy TX
-    plot_normal(pearsons_TX, ax[0], 'client -> server chaff')
+    plot_normal(tx_means, ax[0], 'client -> server chaff')
     # plot dummy RX
-    plot_normal(pearsons_RX, ax[1], 'server -> client chaff')
+    plot_normal(rx_means, ax[1], 'server -> client chaff')
     # plot all
-    plot_normal(np.append(pearsons_RX, pearsons_TX),
+    plot_normal(np.append(rx_means, tx_means),
                 ax[2],
                 "overall chaff packets")
     ax[2].set_xlabel("Pearson score")
@@ -79,6 +110,7 @@ def main(inputs, output_plot):
 if __name__ == "__main__":
     main(**doceasy.doceasy(__doc__, doceasy.Schema({
         "INPUTS": [str],
-        "--output-plot": doceasy.Or(None, str)
+        "--output-plot": doceasy.Or(None, str),
+        "--output-json": str
     }, ignore_extra_keys=True)))
 
