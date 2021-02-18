@@ -54,6 +54,18 @@ def plot_normal(data, ax, title):
     ax.grid()
 
 
+def aggregate_and_means(data):
+    means = np.array([])
+    for (s_id, reps) in data.items():
+        avg = np.nanmean(list(reps.values()))
+        means = np.append(means, avg)
+        # count how many non-nan values
+        r_count = (~np.isnan(list(reps.values()))).sum()
+        data[s_id] = {'count': int(r_count), 'mean': avg, 'reps': reps}
+
+    return means, data
+
+
 def main(inputs, output_plot, output_json):
     # load data
     N = len(inputs)
@@ -67,44 +79,9 @@ def main(inputs, output_plot, output_json):
             (r_rx, _) = data['RX']['stats']
             pearsons_TX = update(pearsons_TX, {sample_id: {rep_id: r_tx}})
             pearsons_RX = update(pearsons_RX, {sample_id: {rep_id: r_rx}})
-            # pearsons_TX = np.append(pearsons_TX, r_tx)
-            # pearsons_RX = np.append(pearsons_RX, r_rx)
 
-
-    # print(pearsons_TX)
-    # print("*****************")
-    # print(pearsons_RX)
-    # print("*****************\n")
-
-    tx_means = np.array([])
-    rx_means = np.array([])
-    for (s_id, reps) in pearsons_TX.items():
-        # print("Sample: ", s_id)
-        # for (rep_id, r) in reps.items():
-        #     print(f"\t{rep_id}:\t{r:.4f}")
-        avg = np.nanmean(list(reps.values()))
-        tx_means = np.append(tx_means, avg)
-        # count how many non-nan values
-        r_count = (~np.isnan(list(reps.values()))).sum()
-        pearsons_TX[s_id] = {'count': int(r_count), 'mean': avg, 'reps': reps}
-
-    # print(pearsons_TX)
-    # print("*****************")
-    # print(tx_means)
-
-    for (s_id, reps) in pearsons_RX.items():
-        # print("Sample: ", s_id)
-        # for (rep_id, r) in reps.items():
-        #     print(f"\t{rep_id}:\t{r:.4f}")
-        avg = np.nanmean(list(reps.values()))
-        rx_means = np.append(rx_means, avg)
-        # count how many non-nan values
-        r_count = (~np.isnan(list(reps.values()))).sum()
-        pearsons_RX[s_id] = {'count': int(r_count), 'mean': avg, 'reps': reps}
-
-    # print(pearsons_RX)
-    # print("#################")
-    # print(rx_means)
+    (tx_means, pearsons_TX) = aggregate_and_means(pearsons_TX)
+    (rx_means, pearsons_RX) = aggregate_and_means(pearsons_RX)
 
     # save aggregated data
     with open(output_json, "w") as f:
