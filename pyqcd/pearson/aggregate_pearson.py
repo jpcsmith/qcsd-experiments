@@ -29,13 +29,15 @@ def plot_normal(data, ax, title):
     xs = np.arange(-0.125, 1.0, 0.01)
     ax.plot(
              xs,
-             1/(std * np.sqrt(2 * np.pi)) *
-             np.exp(-(xs - mu)**2 / (2 * std**2)),
-             linewidth=2, color='r', label=f'$\mu={mu:.3f}$\n$stdev={std:.3f}$'
+             norm.cdf(xs, loc=mu, scale=std),
+             linewidth=2, color='r', label=f'$\mu={mu:.3f}$,\n$stdev={std:.3f}$'
             )
     ax.axvline(mu, color='k', linestyle='dashed', linewidth=1)
+    ax.axhline(norm.cdf(mu, loc=mu, scale=std),
+               color='k', linestyle='dashed', linewidth=1)
+    ax.annotate(f'{mu:.2f}', xy=(mu, 0), xytext=(mu, -0.5))
     ax.set_title(title)
-    ax.set_ylabel("Prevalence")
+    ax.set_ylabel(f"$CDF_{{\mu,\sigma}}$")
     ax.legend()
     ax.grid()
 
@@ -46,6 +48,7 @@ def main(inputs, output_plot):
     pearsons_TX = np.array([])
     pearsons_RX = np.array([])
     for path in inputs:
+        (sample_id, rep_id) = path.split(sep='/')[3].split(sep='_')
         with open(path, "r") as json_file:
             data = json.load(json_file)
             (r_tx, _) = data['TX']['stats']
