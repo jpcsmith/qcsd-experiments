@@ -106,13 +106,14 @@ def simple_overhead(front_cover_traff_csv, trace_csv, front_traff_csv, schedule_
     target = target_out + target_in
 
     df = pd.DataFrame([[defended_out, def_full_out, baseline_out,
-                        schedule_out, target_out],
+                        schedule_out],
                        [defended_in, def_full_in, baseline_in,
-                        schedule_in, target_in],
-                       [defended, def_full, baseline, schedule, target]],
-                      columns=["defended", "defended-full", "baseline", "schedule", "target"])
+                        schedule_in],
+                       [defended, def_full, baseline, schedule]],
+                      columns=["defended", "defended-full", "baseline", "schedule"])
     df = df.rename(index={0: 'TX', 1: 'RX', 2: 'Total'})
 
+    df['target'] = df['baseline'] + df['schedule']
 
     df["diff-schedule"] = df["defended"] - df["schedule"]
     df["diff-target"] = df["defended-full"] - df["target"]
