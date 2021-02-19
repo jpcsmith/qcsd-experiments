@@ -11,12 +11,22 @@ rule test_overhead:
         """
 
 rule front_overhead:
-    """Testing overhead script """
+    """Measure overhead traffic for front defense"""
     input:
-        schedule="results/collect/front_defended/{sample_id}_{rep_id}/schedule.csv"
-    output:
-        stdout="results/overhead/front/{sample_id}_{rep_id}/stdout.txt"
+        schedule="results/collect/front_defended/{sample_id}_{rep_id}/schedule.csv",
+        defended="results/collect/front_defended/{sample_id}_{rep_id}/front_cover_traffic.csv",
+        baseline="results/collect/front_baseline/{sample_id}_{rep_id}/trace.csv",
+        defended_full="results/collect/front_defended/{sample_id}_{rep_id}/front_traffic.csv",
+    output: "results/overhead/front/{sample_id}_{rep_id}/overhead.csv"
     log: "results/overhead/front/{sample_id}_{rep_id}/stderr.txt"
-    shell: """\
-        python3 -m pyqcd.overhead.front_overhead -- {input.schedule} > {output.stdout} 2> {log}
-        """
+    run:
+        import pandas as pd
+        from pyqcd.overhead import front_overhead
+
+        pd.DataFrame(
+            front_overhead.simple_overhead(input.defended,
+                           input.baseline,
+                           input.defended_full,
+                           input.schedule
+                          )
+        ).to_csv(str(output), header=True, index=True)
