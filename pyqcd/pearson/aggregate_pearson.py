@@ -39,18 +39,20 @@ def plot_normal(data, ax, title):
     # fitting curve
     mu, std = norm.fit(data)
     xs = np.arange(-0.125, 1.0, 0.01)
-    ax.plot(
+    ax2 = ax.twinx()
+    ax2.plot(
              xs,
              norm.cdf(xs, loc=mu, scale=std),
              linewidth=2, color='r', label=f'$\mu={mu:.3f}$,\n$stdev={std:.3f}$'
             )
+    ax2.set_ylabel(f"$CDF_{{\mu,\sigma}}$")
+    ax2.legend()
+
     ax.axvline(mu, color='k', linestyle='dashed', linewidth=1)
-    ax.axhline(norm.cdf(mu, loc=mu, scale=std),
+    ax2.axhline(norm.cdf(mu, loc=mu, scale=std),
                color='k', linestyle='dashed', linewidth=1)
-    ax.annotate(f'{mu:.2f}', xy=(mu, 0), xytext=(mu, -0.5))
+    ax.annotate(f'{mu:.2f}', xy=(mu, 0), xytext=(mu, -1.5))
     ax.set_title(title)
-    ax.set_ylabel(f"$CDF_{{\mu,\sigma}}$")
-    ax.legend()
     ax.grid()
 
 
@@ -103,7 +105,7 @@ def main(inputs, output_plot, output_json):
                 ax[2],
                 "overall chaff packets")
     ax[2].set_xlabel("Pearson score")
-
+    f.tight_layout()
     f.savefig(output_plot, dpi=300,  bbox_inches="tight")
 
 
