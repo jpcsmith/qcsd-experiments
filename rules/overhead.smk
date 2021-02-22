@@ -64,9 +64,9 @@ rule overhead_front_aggregated:
     output:
         plot = "results/overhead/front/aggregate/overhead_distribution.png",
         json = "results/overhead/front/aggregate/res.json",
-        # stdout = "results/overhead/front/aggregate/stdout.txt"
+        stdout = "results/overhead/front/aggregate/stdout.txt"
     log: "results/overhead/front/aggregate/stderr.txt"
     shell: """\
         python3 -m pyqcd.overhead.aggregate_overhead --output-plot {output.plot} --output-json {output.json} \
-        -- {input}
+        -- {input} > {output.stdout} 2> {log}
     """

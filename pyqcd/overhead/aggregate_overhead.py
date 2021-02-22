@@ -119,8 +119,14 @@ def main(inputs, output_plot, output_json):
     tx_means = aggreagate(dfs, 'TX')
     rx_means = aggreagate(dfs, 'RX')
     tot_means = aggreagate(dfs, 'Total')
+
+    resdict = {
+                'TX': tx_means.to_dict(),
+                'RX': rx_means.to_dict(),
+                'Total': tot_means.to_dict()
+                }
     with open(output_json, "w") as f:
-        json.dump(tot_means.to_json(orient='index'), f)
+        json.dump(resdict, f)
 
     f, ax = plt.subplots(1, 2, figsize=(14, 6))
 
@@ -128,7 +134,8 @@ def main(inputs, output_plot, output_json):
     ax[0].boxplot([tx_means['r_target']*100,
                    rx_means['r_target']*100,
                    tot_means['r_target']*100],
-                  labels=ticks, manage_ticks=True)
+                  labels=ticks, manage_ticks=True,
+                  sym='')
     ax[0].grid()
     ax[0].set_ylabel('Overhead [%]')
     ax[0].set_title(f'$(|defended| - |target|) / |target|$')
@@ -148,17 +155,17 @@ def main(inputs, output_plot, output_json):
                         # labels=ticks, manage_ticks=True,
                         widths=0.6)
     set_box_color(bpl, PALETTE['blue'])  # colors are from http://colorbrewer2.org/
-    set_box_color(bpr, PALETTE['orange'])
+    set_box_color(bpr, PALETTE['coral'])
     # draw temporary red and blue lines and use them to create a legend
     ax[1].plot([], c=PALETTE['blue'], label='QCD')
-    ax[1].plot([], c=PALETTE['orange'], label='Front (theoretical)')
+    ax[1].plot([], c=PALETTE['coral'], label='Front (theoretical)')
     ax[1].set_xticks(range(0, len(ticks) * 2, 2))
     ax[1].set_xticklabels(ticks)
     ax[1].legend()
     ax[1].grid()
 
     ax[1].set_ylabel('Overhead [%]')
-    ax[1].set_title(f'$(|defended| - |baseline|) / |baseline|$')
+    ax[1].set_title('QCD vs. FRONT overhead over undefended traffic.')
     f.savefig(output_plot, dpi=300,  bbox_inches="tight")
     # f, ax = plt.subplots(3, 1, figsize=(10, 12))
     # # plot means TX
