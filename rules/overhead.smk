@@ -32,17 +32,19 @@ rule front_overhead:
         ).to_csv(str(output), header=True, index=True)
 
 def front_overhead__all_input(wildcards):
-    input_def = rules.collect_front_baseline.output[1] # trace.pacapng
-    s_ids = glob_wildcards(input_def).sample_id
-    r_ids = glob_wildcards(input_def).rep_id
+    input_bas = rules.collect_front_baseline.output[1] # trace.pacapng
+    s_ids_bas = glob_wildcards(input_bas).sample_id
+    r_ids_bas = glob_wildcards(input_bas).rep_id
+    input_def = rules.collect_front_defended.output[1] # trace.pacapng
+    s_ids_def = glob_wildcards(input_def).sample_id
+    r_ids_def = glob_wildcards(input_def).rep_id
 
+    intersection = list(set(zip(s_ids_bas, r_ids_bas))
+                        & set(zip(s_ids_def, r_ids_def))
+                        )
+    s_ids = [i for (i,_) in intersection]
+    r_ids = [i for (_,i) in intersection]
     return expand(rules.front_overhead.output[0], zip, sample_id=s_ids, rep_id=r_ids)
-
-    # input_dir = checkpoints.url_dependencies__csv.get(**wildcards).output[0]
-    # sample_ids = glob_wildcards(input_dir + "/{sample_id}.csv").sample_id
-
-    # return expand(rules.pearson_front_dummy.output["plot"], sample_id=sample_ids,
-    #                rep_id=range(config["collect_reps"]))
 
 rule front_overhead__all:
     """Gives front overhead for all collected traces """
@@ -70,3 +72,22 @@ rule overhead_front_aggregated:
         python3 -m pyqcd.overhead.aggregate_overhead --output-plot {output.plot} --output-json {output.json} \
         -- {input} > {output.stdout} 2> {log}
     """
+
+rule test_expand:
+    run:
+        input_bas = rules.collect_front_baseline.output[1] # trace.pacapng
+        s_ids_bas = glob_wildcards(input_bas).sample_id
+        r_ids_bas = glob_wildcards(input_bas).rep_id
+        input_def = rules.collect_front_defended.output[1] # trace.pacapng
+        s_ids_def = glob_wildcards(input_def).sample_id
+        r_ids_def = glob_wildcards(input_def).rep_id
+
+        intersection = list(set(zip(s_ids_bas, r_ids_bas))
+                            & set(zip(s_ids_def, r_ids_def))
+                            )
+        s_ids = [i for (i,_) in intersection]
+        r_ids = [i for (_,i) in intersection]
+
+        print(
+            expand(rules.front_overhead.output[0], zip, sample_id=s_ids, rep_id=r_ids)
+        )
