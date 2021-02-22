@@ -22,8 +22,15 @@ import collections.abc
 import json
 import doceasy
 
+PALETTE = {'blue': '#4898de',
+           'purple': '#a7a3e0',
+           'fucsia': '#dab4da',
+           'pink': '#f4cddb',
+           'rosepink': '#ffb7b6',
+           'coral': '#ffae75',
+           'orange': '#f7b819'}
 
-N_BINS_NORMAL = 20
+N_BINS_NORMAL = 100
 
 def update(d, u):
     for k, v in u.items():
@@ -40,7 +47,7 @@ def update(d, u):
 def aggreagate(data, direction):
     res = {}
     for (s_id, dfs) in data.items():
-        print("Sample: ", s_id)
+        # print("Sample: ", s_id)
         reps = {'r_schedule': [], 'r_target': [], 'r_full': [], 'r_baseline': []}
         for (rep_id, df) in dfs.items():
             # print(df.loc[direction])
@@ -53,21 +60,21 @@ def aggreagate(data, direction):
         # print(reps)
         s_means = pd.DataFrame(reps).mean(axis=0)
         res[s_id] = s_means
-    print(pd.DataFrame.from_dict(res, orient='index'))
+    # print(pd.DataFrame.from_dict(res, orient='index'))
     return pd.DataFrame.from_dict(res, orient='index')
 
 
 def plot_normal(data, ax, title):
-    ax.set_xlim(left=-0.125, right=1.0)
+    # ax.set_xlim(left=-0.125, right=1.0)
     count_, bins, _ = ax.hist(data, bins=N_BINS_NORMAL, density=True)
     # fitting curve
     mu, std = norm.fit(data)
-    xs = np.arange(-0.125, 1.0, 0.01)
-    ax.plot(
-             xs,
-             norm.cdf(xs, loc=mu, scale=std),
-             linewidth=2, color='r', label=f'$\mu={mu:.3f}$,\n$stdev={std:.3f}$'
-            )
+    # xs = np.arange(-0.125, 1.0, 0.01)
+    # ax.plot(
+    #          xs,
+    #          norm.cdf(xs, loc=mu, scale=std),
+    #          linewidth=2, color='r', label=f'$\mu={mu:.3f}$,\n$stdev={std:.3f}$'
+    #         )
     ax.axvline(mu, color='k', linestyle='dashed', linewidth=1)
     ax.axhline(norm.cdf(mu, loc=mu, scale=std),
                color='k', linestyle='dashed', linewidth=1)
@@ -77,22 +84,16 @@ def plot_normal(data, ax, title):
     ax.legend()
     ax.grid()
 
+def set_box_color(bp, color):
+    plt.setp(bp['boxes'], color=color)
+    plt.setp(bp['whiskers'], color=color)
+    plt.setp(bp['caps'], color=color)
+    plt.setp(bp['medians'], color=color)
 
 def main(inputs, output_plot, output_json):
 
-    print(inputs)
-    print("*******")
-    print(output_plot)
-    print(output_json)
-
-    foo = pd.read_csv(inputs[0], index_col=0)
-    print(foo.loc['TX','defended'])
-
-
     dfs = {}
     for path in inputs:
-        print(dfs)
-        print("***")
         (sample_id, rep_id) = path.split(sep='/')[3].split(sep='_')
         data = pd.read_csv(path, index_col=0)
         dfs = update(dfs, {sample_id: {rep_id: data}})
@@ -118,22 +119,66 @@ def main(inputs, output_plot, output_json):
     tx_means = aggreagate(dfs, 'TX')
     rx_means = aggreagate(dfs, 'RX')
     tot_means = aggreagate(dfs, 'Total')
-    print(tx_means)
     with open(output_json, "w") as f:
         json.dump(tot_means.to_json(orient='index'), f)
 
-    f, ax = plt.subplots(3, 1, figsize=(10, 12))
-    # plot means TX
-    plot_normal(tx_means['r_target'], ax[0], 'client -> server overhead')
-    # plot means RX
-    plot_normal(rx_means['r_target'], ax[1], 'server -> client overhead')
-    # plot all
-    # plot_normal(np.append(rx_means, tx_means),
-    #             ax[2],
-    #             "overall overhead packets")
-    # ax[2].set_xlabel("Pearson score")
+    f, ax = plt.subplots(1, 2, figsize=(14, 6))
 
+    ticks = ['TX', 'RX', 'Tot']
+    ax[0].boxplot([tx_means['r_target']*100,
+                   rx_means['r_target']*100,
+                   tot_means['r_target']*100],
+                  labels=ticks, manage_ticks=True)
+    ax[0].grid()
+    ax[0].set_ylabel('Overhead [%]')
+    ax[0].set_title(f'$(|defended| - |target|) / |target|$')
+
+    data_qcd = [tx_means['r_full']*100,
+                 rx_means['r_full']*100,
+                 tot_means['r_full']*100]
+    data_front =[tx_means['r_baseline']*100,
+                 rx_means['r_baseline']*100,
+                 tot_means['r_baseline']*100] 
+    bpl = ax[1].boxplot(data_qcd,
+                        positions=np.array(range(len(data_qcd)))*2.0-0.4,
+                        # labels=ticks, manage_ticks=True,
+                        widths=0.6)
+    bpr = ax[1].boxplot(data_front,
+                        positions=np.array(range(len(data_front)))*2.0+0.4,
+                        # labels=ticks, manage_ticks=True,
+                        widths=0.6)
+    set_box_color(bpl, PALETTE['blue'])  # colors are from http://colorbrewer2.org/
+    set_box_color(bpr, PALETTE['orange'])
+    # draw temporary red and blue lines and use them to create a legend
+    ax[1].plot([], c=PALETTE['blue'], label='QCD')
+    ax[1].plot([], c=PALETTE['orange'], label='Front (theoretical)')
+    ax[1].set_xticks(range(0, len(ticks) * 2, 2))
+    ax[1].set_xticklabels(ticks)
+    ax[1].legend()
+    ax[1].grid()
+
+    ax[1].set_ylabel('Overhead [%]')
+    ax[1].set_title(f'$(|defended| - |baseline|) / |baseline|$')
     f.savefig(output_plot, dpi=300,  bbox_inches="tight")
+    # f, ax = plt.subplots(3, 1, figsize=(10, 12))
+    # # plot means TX
+    # plot_normal(tx_means['r_target'], ax[0], 'client -> server overhead')
+    # # plot means RX
+    # plot_normal(rx_means['r_target'], ax[1], 'server -> client overhead')
+    # # plot all
+    # # plot_normal(np.append(rx_means, tx_means),
+    # #             ax[2],
+    # #             "overall overhead packets")
+    # # ax[2].set_xlabel("Pearson score")
+
+    # f.savefig(output_plot, dpi=300,  bbox_inches="tight")
+
+    # fig1, ax1 = plt.subplots()
+    # ax1.set_title('Basic Plot')
+    # ax1.boxplot(tx_means['r_target'])
+    # fig1.show()
+    # fig1.savefig(output_plot, dpi=300,  bbox_inches="tight")
+
 
 
 if __name__ == "__main__":

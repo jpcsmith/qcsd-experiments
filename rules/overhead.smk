@@ -31,6 +31,24 @@ rule front_overhead:
                           )
         ).to_csv(str(output), header=True, index=True)
 
+def front_overhead__all_input(wildcards):
+    input_def = rules.collect_front_baseline.output[1] # trace.pacapng
+    s_ids = glob_wildcards(input_def).sample_id
+    r_ids = glob_wildcards(input_def).rep_id
+
+    return expand(rules.front_overhead.output[0], zip, sample_id=s_ids, rep_id=r_ids)
+
+    # input_dir = checkpoints.url_dependencies__csv.get(**wildcards).output[0]
+    # sample_ids = glob_wildcards(input_dir + "/{sample_id}.csv").sample_id
+
+    # return expand(rules.pearson_front_dummy.output["plot"], sample_id=sample_ids,
+    #                rep_id=range(config["collect_reps"]))
+
+rule front_overhead__all:
+    """Gives front overhead for all collected traces """
+    input: front_overhead__all_input
+    message: "rule front_overhead__all:\n\tmeasure all overheads"
+
 def overhead_front_aggreagted_input(wildcards):
     overhead_dir = rules.front_overhead.output[0] # points to the csv
     s_ids = glob_wildcards(overhead_dir).sample_id
@@ -40,7 +58,7 @@ def overhead_front_aggreagted_input(wildcards):
     return expand(rules.front_overhead.output[0], zip, sample_id=s_ids,
             rep_id=s_rep)
 
-rule overhead_front_aggreagated:
+rule overhead_front_aggregated:
     """Aggregates results from front_overhead and plot distribution of mean of results"""
     input: overhead_front_aggreagted_input
     output:
