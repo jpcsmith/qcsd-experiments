@@ -24,7 +24,7 @@ rule front_overhead:
         from pyqcd.overhead import front_overhead
 
         pd.DataFrame(
-            front_overhead.simple_overhead(input.defended,
+            front_overhead.trace_overhead(input.defended,
                            input.baseline,
                            input.defended_full,
                            input.schedule
@@ -32,6 +32,9 @@ rule front_overhead:
         ).to_csv(str(output), header=True, index=True)
 
 def front_overhead__all_input(wildcards):
+    """creates the input for the aggregated overhead from the intersection of
+        available defended and baseline rtaces
+    """"
     input_bas = rules.collect_front_baseline.output[1] # trace.pacapng
     s_ids_bas = glob_wildcards(input_bas).sample_id
     r_ids_bas = glob_wildcards(input_bas).rep_id
@@ -72,22 +75,3 @@ rule overhead_front_aggregated:
         python3 -m pyqcd.overhead.aggregate_overhead --output-plot {output.plot} --output-json {output.json} \
         -- {input} > {output.stdout} 2> {log}
     """
-
-rule test_expand:
-    run:
-        input_bas = rules.collect_front_baseline.output[1] # trace.pacapng
-        s_ids_bas = glob_wildcards(input_bas).sample_id
-        r_ids_bas = glob_wildcards(input_bas).rep_id
-        input_def = rules.collect_front_defended.output[1] # trace.pacapng
-        s_ids_def = glob_wildcards(input_def).sample_id
-        r_ids_def = glob_wildcards(input_def).rep_id
-
-        intersection = list(set(zip(s_ids_bas, r_ids_bas))
-                            & set(zip(s_ids_def, r_ids_def))
-                            )
-        s_ids = [i for (i,_) in intersection]
-        r_ids = [i for (_,i) in intersection]
-
-        print(
-            expand(rules.front_overhead.output[0], zip, sample_id=s_ids, rep_id=r_ids)
-        )

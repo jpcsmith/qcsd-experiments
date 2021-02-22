@@ -70,6 +70,7 @@ checkpoint collect_front_baseline:
         """
 
 rule front_baseline_csv:
+    """Parse baseline trace into csv file """
     input:
         pcap=rules.collect_front_baseline.output["pcap"]
     output:
@@ -83,7 +84,7 @@ rule front_baseline_csv:
         ).to_csv(str(output), header=True, index=False)
 
 rule front_trace_csv:
-    """Parses all packets in the pcap"""
+    """Parses all packets in defended trace to csv"""
     input:
         pcap=rules.collect_front_defended.output["pcap"]
     output:
