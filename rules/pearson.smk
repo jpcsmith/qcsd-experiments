@@ -9,7 +9,7 @@ rule pearson_front_dummy:
         json="results/pearson/front/{sample_id}_{rep_id}/res.json",
         stdout="results/pearson/front/{sample_id}_{rep_id}/stdout.txt"
     params:
-        window=25, # int
+        window=125, # int
         rate=10.0 # float
     log:
         "results/pearson/front/{sample_id}_{rep_id}/stderr.txt"

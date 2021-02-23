@@ -29,6 +29,8 @@ import scipy.stats as stats
 import doceasy
 import json
 
+LAG_MAX_ABS = 120
+
 
 def load_cover_trace(filename, rate):
     data = pd.read_csv(filename)
@@ -70,6 +72,11 @@ def load_schedule(filename, rate):
     return data.xs(True), data.xs(False)
 
 
+def lagged_crosscorr(s1,s2,lag=0):
+    r,p = stats.pearsonr(s1.shift(lag).fillna(0), s2)
+    return r
+
+
 def main(inputs, output_plot, output_json, window_size=25, sample_rate=5):
     """Measure Pearson correlation between two traces.
         Outputs graph of rolling window Pearson."""
@@ -83,6 +90,22 @@ def main(inputs, output_plot, output_json, window_size=25, sample_rate=5):
     df_rx = pd.concat([-incoming, -baseline_in], keys=["Defended", "Baseline"], axis=1).fillna(0)
     bins_rx = df_rx.index.values.astype(float)
     bins_tx = df_tx.index.values.astype(float)
+
+    # using the lagged pearson correlation
+    rs = [lagged_crosscorr(df_rx['Defended'],
+                           df_rx["Baseline"],
+                           lag) for lag in range(-LAG_MAX_ABS, LAG_MAX_ABS)]
+    offset = np.argmax(rs)-np.ceil(len(rs)/2)
+
+    print("Offset RX: {}".format(offset))
+    df_rx["Defended"] = df_rx["Defended"].shift(int(offset)).fillna(0)
+    rs = [lagged_crosscorr(df_tx['Defended'],
+                           df_tx["Baseline"],
+                           lag) for lag in range(-LAG_MAX_ABS, LAG_MAX_ABS)]
+    offset = np.ceil(len(rs)/2)-np.argmax(rs)
+
+    print("Offset TX: {}".format(offset))
+    df_tx["Defended"] = df_tx["Defended"].shift(int(offset)).fillna(0)
 
     rolling_rx = df_rx['Defended'].rolling(window=r_window_size, center=True).corr(df_rx['Baseline'])
     rolling_tx = df_tx['Defended'].rolling(window=r_window_size, center=True).corr(df_tx['Baseline'])
