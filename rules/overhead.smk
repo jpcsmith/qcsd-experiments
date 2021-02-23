@@ -33,8 +33,7 @@ rule front_overhead:
 
 def front_overhead__all_input(wildcards):
     """creates the input for the aggregated overhead from the intersection of
-        available defended and baseline rtaces
-    """"
+        available defended and baseline rtaces"""
     input_bas = rules.collect_front_baseline.output[1] # trace.pacapng
     s_ids_bas = glob_wildcards(input_bas).sample_id
     r_ids_bas = glob_wildcards(input_bas).rep_id
