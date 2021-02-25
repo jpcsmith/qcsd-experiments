@@ -165,3 +165,12 @@ rule collect_front_baseline_single__all:
     collection."""
     input: collect_front_baseline_single__all_input
     message: "rule collect_front_baseline__all:\n\tConvenience method for collecting the FRONT baseline samples"
+
+checkpoint successful_collection:
+    input: "results/collect/front_defended/{sample_id}_{rep_id}/trace.pcapng"
+    log: "results/collect/front_defended/{sample_id}_{rep_id}/succ_log.txt"
+    shell: """\
+        if tshark -r results/collect/front_defended/{sample_id}_{rep_id}/trace.pcapng -Y 'quic.frame_type in {0x1c..0x1d}' -Tfields -e 'quic.cc.reason_phrase' | grep -q kthx4shaping ; then
+            touch "results/collect/front_defended/{sample_id}_{rep_id}/success_collect";
+        fi
+    """
