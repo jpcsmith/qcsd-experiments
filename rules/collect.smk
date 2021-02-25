@@ -172,8 +172,8 @@ rule collect_front_baseline_single__all:
     message: "rule collect_front_baseline__all:\n\tConvenience method for collecting the FRONT baseline samples"
 
 checkpoint successful_collection:
-"""From the trace pcap, determines if the collection completed successfully,
-    creating a telltale empty file"""
+    """From the trace pcap, determines if the collection completed successfully,
+    creating a telltale empty file."""
     input: "results/collect/front_defended/{sample_id}_{rep_id}/trace.pcapng"
     output: "results/collect/front_defended/{sample_id}_{rep_id}/success_collect"
     log: "results/collect/front_defended/{sample_id}_{rep_id}/succ_log.txt"
