@@ -41,6 +41,7 @@ checkpoint collect_front_defended:
         dummy_ids="results/collect/front_defended/{sample_id}_{rep_id}/dummy_streams.txt",
         sampled_schedule="results/collect/front_defended/{sample_id}_{rep_id}/schedule.csv",
         pcap="results/collect/front_defended/{sample_id}_{rep_id}/trace.pcapng",
+        success = "results/collect/front_defended/{sample_id}_{rep_id}/success_collect",
     log:
         "results/collect/front_defended/{sample_id}_{rep_id}/stderr.txt"
     resources:
@@ -50,6 +51,10 @@ checkpoint collect_front_defended:
         RUST_LOG=neqo_transport=info,debug python3 -m pyqcd.collect.neqo_capture_client \
             --pcap-file {output.pcap} -- --url-dependencies-from {input.url_dep} \
             > {output.stdout} 2> {log}
+        
+        if tshark -r {output.pcap} -Y 'quic.frame_type in {{0x1c..0x1d}}' -Tfields -e 'quic.cc.reason_phrase' | grep -q kthx4shaping ; then
+            touch {output.success};
+        fi
         """
 
 checkpoint collect_front_baseline:
@@ -168,9 +173,10 @@ rule collect_front_baseline_single__all:
 
 checkpoint successful_collection:
     input: "results/collect/front_defended/{sample_id}_{rep_id}/trace.pcapng"
+    output: "results/collect/front_defended/{sample_id}_{rep_id}/success_collect"
     log: "results/collect/front_defended/{sample_id}_{rep_id}/succ_log.txt"
     shell: """\
-        if tshark -r results/collect/front_defended/{sample_id}_{rep_id}/trace.pcapng -Y 'quic.frame_type in {0x1c..0x1d}' -Tfields -e 'quic.cc.reason_phrase' | grep -q kthx4shaping ; then
-            touch "results/collect/front_defended/{sample_id}_{rep_id}/success_collect";
+        if tshark -r {input} -Y 'quic.frame_type in {{0x1c..0x1d}}' -Tfields -e 'quic.cc.reason_phrase' | grep -q kthx4shaping ; then
+            touch {output};
         fi
     """
