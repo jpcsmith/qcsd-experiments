@@ -6,6 +6,8 @@ wildcard_constraints:
     sample_id="\d+",
     rep_id="\d+"
 
+ruleorder: successful_collection > collect_front_defended
+
 rule create_chaff_schedule:
     """Creates a schedule for chaff traffic sampled from Rayleigh."""
     params:
@@ -171,7 +173,7 @@ rule collect_front_baseline_single__all:
     input: collect_front_baseline_single__all_input
     message: "rule collect_front_baseline__all:\n\tConvenience method for collecting the FRONT baseline samples"
 
-checkpoint successful_collection:
+rule successful_collection:
     """From the trace pcap, determines if the collection completed successfully,
     creating a telltale empty file."""
     input: "results/collect/front_defended/{sample_id}_{rep_id}/trace.pcapng"
@@ -182,3 +184,16 @@ checkpoint successful_collection:
             touch {output};
         fi
     """
+
+def successful_collect_input__all(wildcards):
+    collect_dir = rules.collect_front_defended.output[3] # points to the pcap
+    s_ids = glob_wildcards(collect_dir).sample_id
+    s_rep = glob_wildcards(collect_dir).rep_id
+    
+
+    return expand(rules.successful_collection.output[0], zip, sample_id=s_ids,
+            rep_id=s_rep)
+
+rule successful_collection__all:
+    input: successful_collect_input__all
+    message: "Determines the samples that already have a trace.pcapng output and creates the success file if correct"
