@@ -195,5 +195,6 @@ def successful_collect_input__all(wildcards):
             rep_id=s_rep)
 
 rule successful_collection__all:
+    "Determines the samples that already have a trace.pcapng output and creates the success file if correct"
     input: successful_collect_input__all
-    message: "Determines the samples that already have a trace.pcapng output and creates the success file if correct"
+    message: "To run with '-k' flag or it will stop at the first unsuccess"

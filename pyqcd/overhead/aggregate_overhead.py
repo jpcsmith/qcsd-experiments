@@ -27,7 +27,10 @@ PALETTE = {'blue': '#4898de',
            'pink': '#f4cddb',
            'rosepink': '#ffb7b6',
            'coral': '#ffae75',
-           'orange': '#f7b819'}
+           'orange': '#f7b819',
+           'azure': '#4cacc4',
+           'ocra': '#c8b06e',
+           'rose': '#c4444b'}
 
 def update(d, u):
     for k, v in u.items():
@@ -62,7 +65,7 @@ def set_box_color(bp, color):
     plt.setp(bp['boxes'], color=color)
     plt.setp(bp['whiskers'], color=color)
     plt.setp(bp['caps'], color=color)
-    plt.setp(bp['medians'], color=color)
+    plt.setp(bp['medians'], color=PALETTE['rose'])
 
 
 def main(inputs, output_plot, output_json):
@@ -109,10 +112,10 @@ def main(inputs, output_plot, output_json):
     ax[0].set_title(f'$(|defended| - |target|) / |target|$')
 
     # comparison QCD vs FRONT theoretical 
-    data_qcd = [tx_means['r_full']*100,
+    data_qcd = [
                 rx_means['r_full']*100,
                 tot_means['r_full']*100]
-    data_front = [tx_means['r_baseline']*100,
+    data_front = [
                   rx_means['r_baseline']*100,
                   tot_means['r_baseline']*100]
     bpl = ax[1].boxplot(data_qcd,
@@ -123,13 +126,13 @@ def main(inputs, output_plot, output_json):
                         positions=np.array(range(len(data_front)))*2.0+0.4,
                         # labels=ticks, manage_ticks=True,
                         widths=0.6)
-    set_box_color(bpl, PALETTE['blue'])
-    set_box_color(bpr, PALETTE['coral'])
+    set_box_color(bpl, PALETTE['azure'])
+    set_box_color(bpr, PALETTE['ocra'])
     # draw temporary red and blue lines and use them to create a legend
-    ax[1].plot([], c=PALETTE['blue'], label='QCD FRONT')
-    ax[1].plot([], c=PALETTE['coral'], label='Front (theoretical)')
+    ax[1].plot([], c=PALETTE['azure'], label='QCD FRONT')
+    ax[1].plot([], c=PALETTE['coral'], label='FRONT (theoretical)')
     ax[1].set_xticks(range(0, len(ticks) * 2, 2))
-    ax[1].set_xticklabels(ticks)
+    ax[1].set_xticklabels(ticks[1:])
     ax[1].legend()
     ax[1].grid()
     ax[1].set_ylabel('Overhead [%]')
