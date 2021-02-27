@@ -9,7 +9,7 @@ clamp_sld_domains: ["blogspot.com", "appspot.com"]
 max_fetch_urls: 1000
 
 # The number of collection repetitions
-collect_reps: 40
+collect_reps: 20
 
 # Location of the neqo directory
 neqo: "/Users/luca/Documents/ETHZ/Thesis/code/neqo-qcd/"
