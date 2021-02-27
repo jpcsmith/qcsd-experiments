@@ -131,7 +131,7 @@ def main(inputs, output_plot, output_json):
     # draw temporary red and blue lines and use them to create a legend
     ax[1].plot([], c=PALETTE['azure'], label='QCD FRONT')
     ax[1].plot([], c=PALETTE['coral'], label='FRONT (theoretical)')
-    ax[1].set_xticks(range(0, len(ticks) * 2, 2))
+    ax[1].set_xticks(range(0, len(ticks[1:]) * 2, 2))
     ax[1].set_xticklabels(ticks[1:])
     ax[1].legend()
     ax[1].grid()
