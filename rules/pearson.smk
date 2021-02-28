@@ -20,11 +20,12 @@ rule pearson_front_dummy:
         """
 
 def pearson_front_dummy__all_input(wildcards):
-    input_dir = checkpoints.url_dependencies__csv.get(**wildcards).output[0]
-    sample_ids = glob_wildcards(input_dir + "/{sample_id}.csv").sample_id
-
-    return expand(rules.pearson_front_dummy.output["plot"], sample_id=sample_ids,
-                   rep_id=range(config["collect_reps"]))
+    collect_dir = rules.collect_front_defended.output["success"] # points to the json
+    s_ids = glob_wildcards(collect_dir).sample_id
+    s_rep = glob_wildcards(collect_dir).rep_id
+    
+    return expand(rules.pearson_front_dummy.output["json"], zip, sample_id=s_ids,
+            rep_id=s_rep)
 
 rule pearson_front_dummy__all:
     """Determine the number of samples collected and measures the
