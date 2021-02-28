@@ -29,7 +29,7 @@ import scipy.stats as stats
 import doceasy
 import json
 
-LAG_MAX_ABS = 120
+LAG_MAX_MS = 250
 
 
 def load_cover_trace(filename, rate):
@@ -92,20 +92,20 @@ def main(inputs, output_plot, output_json, window_size=25, sample_rate=5):
     bins_tx = df_tx.index.values.astype(float)
 
     # using the lagged pearson correlation
+    max_lag = int(LAG_MAX_MS / float(sample_rate))
     rs = [lagged_crosscorr(df_rx['Defended'],
                            df_rx["Baseline"],
-                           lag) for lag in range(-LAG_MAX_ABS, LAG_MAX_ABS)]
+                           lag) for lag in range(0, max_lag+1)]
     offset = np.argmax(rs)-np.ceil(len(rs)/2)
-
     print("Offset RX: {}".format(offset))
     df_rx["Defended"] = df_rx["Defended"].shift(int(offset)).fillna(0)
-    rs = [lagged_crosscorr(df_tx['Defended'],
-                           df_tx["Baseline"],
-                           lag) for lag in range(-LAG_MAX_ABS, LAG_MAX_ABS)]
-    offset = np.ceil(len(rs)/2)-np.argmax(rs)
 
-    print("Offset TX: {}".format(offset))
-    df_tx["Defended"] = df_tx["Defended"].shift(int(offset)).fillna(0)
+    # rs = [lagged_crosscorr(df_tx['Defended'],
+    #                        df_tx["Baseline"],
+    #                        lag) for lag in range(-LAG_MAX_ABS, LAG_MAX_ABS)]
+    # offset = np.ceil(len(rs)/2)-np.argmax(rs)
+    # print("Offset TX: {}".format(offset))
+    # df_tx["Defended"] = df_tx["Defended"].shift(int(offset)).fillna(0)
 
     rolling_rx = df_rx['Defended'].rolling(window=r_window_size, center=True).corr(df_rx['Baseline'])
     rolling_tx = df_tx['Defended'].rolling(window=r_window_size, center=True).corr(df_tx['Baseline'])

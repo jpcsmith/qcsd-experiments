@@ -10,7 +10,7 @@ rule pearson_front_dummy:
         stdout="results/pearson/front/{sample_id}_{rep_id}/stdout.txt"
     params:
         window=125, # int
-        rate=10.0 # float
+        rate=50.0 # float
     log:
         "results/pearson/front/{sample_id}_{rep_id}/stderr.txt"
     shell: """\
@@ -44,7 +44,7 @@ rule pearson_front_full:
         plot="results/pearson/front/{sample_id}_{rep_id}/rolling_pearson_all.png"
     params:
         window=25, # int
-        rate=10.0 # float
+        rate=50.0 # float
     log:
         "results/pearson/front/{sample_id}_{rep_id}/stderr_test.txt"
     shell: """\
