@@ -3,7 +3,7 @@ alexa_list: "data/alexa-1m-2021-01-04.csv.gz"
 # Versions of QUIC supported in our experiments
 supported_versions: ["h3-29"]
 # Second level domains that whose representation in the dataset are reduced
-clamp_sld_domains: ["blogspot.com", "appspot.com"]
+clamp_sld_domains: ["blogspot.com", "appspot.com", "myshopify.com"]
 
 # The maximum number of URLs to attempt to fetch
 max_fetch_urls: 1000
