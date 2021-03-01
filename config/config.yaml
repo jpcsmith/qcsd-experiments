@@ -1,5 +1,6 @@
 # The Alexa top list, http://s3.amazonaws.com/alexa-static/top-1m.csv.zip
-alexa_list: "data/alexa-1m-2021-01-04.csv.gz"
+# alexa_list: "data/alexa-1m-2021-01-04.csv.gz"
+alexa_list: "data/alexa-1m-2021-03-01.csv.zip"
 # Versions of QUIC supported in our experiments
 supported_versions: ["h3-29"]
 # Second level domains that whose representation in the dataset are reduced
