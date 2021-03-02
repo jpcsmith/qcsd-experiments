@@ -50,6 +50,7 @@ checkpoint collect_front_defended:
         cap_iface=1
     shell: """\
         CSDEF_DUMMY_ID={output.dummy_ids} CSDEF_INPUT_TRACE={input.schedule} CSDEF_DUMMY_SCHEDULE={output.sampled_schedule} \
+        CSDEF_SHAPER_CONFIG=front-config/config1.toml \
         RUST_LOG=neqo_transport=info,debug python3 -m pyqcd.collect.neqo_capture_client \
             --pcap-file {output.pcap} -- --url-dependencies-from {input.url_dep} \
             > {output.stdout} 2> {log}
