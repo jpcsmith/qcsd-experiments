@@ -1,6 +1,9 @@
 #: Allow only 1 simultaneous packet capture by default
 workflow.global_resources.setdefault("cap_iface",  1)
 
+# select the CSDEF config
+csdef_config = "front-config/config1.toml"
+
 #: Specify constraints on the wildcards
 wildcard_constraints:
     sample_id="\d+",
@@ -20,7 +23,7 @@ rule create_chaff_schedule:
     run:
         from pyqcd.rayleigh import sample_rayleigh
         import toml
-        with open(resources.csdef_config, "r") as f:
+        with open(csdef_config, "r") as f:
             front_config=toml.loads(f.read())['front_defence']
         with open(output.rnd_seed, "w") as flog:
             flog.write(f'{params.seed}\n')
@@ -61,7 +64,7 @@ checkpoint collect_front_defended:
         cap_iface=1
     shell: """\
         CSDEF_DUMMY_ID={output.dummy_ids} CSDEF_INPUT_TRACE={input.schedule} CSDEF_DUMMY_SCHEDULE={output.sampled_schedule} \
-        CSDEF_SHAPER_CONFIG=front-config/config1.toml \
+        CSDEF_SHAPER_CONFIG={csdef_config} \
         RUST_LOG=neqo_transport=info,debug python3 -m pyqcd.collect.neqo_capture_client \
             --pcap-file {output.pcap} -- --url-dependencies-from {input.url_dep} \
             > {output.stdout} 2> {log}
