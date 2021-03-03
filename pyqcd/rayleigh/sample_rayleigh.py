@@ -13,6 +13,8 @@ def sample_timestamps(n_max, sigma_min, sigma_max):
     n = np.random.randint(1, n_max)
     w = np.random.rand() * (sigma_max - sigma_min) + sigma_min
 
+    print(f"n: {n}\tw: {w}")
+
     return np.random.rayleigh(w, n)
 
 

@@ -11,7 +11,7 @@ ruleorder: successful_collection > collect_front_defended
 rule create_chaff_schedule:
     """Creates a schedule for chaff traffic sampled from Rayleigh."""
     params:
-        seed=0xdeadbeef
+        seed=0xBADDCAFE
     resources:
         csdef_config="front-config/config1.toml"
     output:
@@ -32,6 +32,17 @@ rule create_chaff_schedule:
                                       size=front_config['packet_size'],
                                       outcsv=output.schedule
                                      )
+
+rule create_chaff_schedule_fast:
+    """Creates the chaff schedule once for sample 000_0 then copies it to all folders."""
+    input:
+        schedule="results/collect/front_defended/000_0/chaff_schedule.csv",
+        seed="results/collect/front_defended/000_0/rnd_seed.txt"
+    shell:"""\
+        find results/collect/front_defended/* -type d -exec cp {input.schedule} {{}} \;
+        find results/collect/front_defended/* -type d -exec cp {input.seed} {{}} \;
+        """
+
 
 checkpoint collect_front_defended:
     """Collect defended QUIC traces shaped with the FRONT defence."""
