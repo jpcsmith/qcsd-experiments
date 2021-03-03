@@ -1,0 +1,12 @@
+[flow_shaper]
+control_interval = 5
+initial_md = 3000
+rx_stream_data_window = 1048576
+local_md = 4611686018427387903
+
+[front_defence]
+n_client_packets = 1250
+n_server_packets = 1250
+packet_size = 1450
+peak_minimum = 1.0
+peak_maximum = 14.0
