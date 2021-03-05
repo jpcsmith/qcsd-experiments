@@ -2,7 +2,8 @@
 workflow.global_resources.setdefault("cap_iface",  1)
 
 # select the CSDEF config
-csdef_config = "front-config/config1.toml"
+# csdef_config ="../neqo-qcd/neqo-csdef/src/config.toml"
+csdef_config ="front-config/config2.toml"
 
 #: Specify constraints on the wildcards
 wildcard_constraints:
@@ -15,8 +16,6 @@ rule create_chaff_schedule:
     """Creates a schedule for chaff traffic sampled from Rayleigh."""
     params:
         seed=0xBADDCAFE
-    resources:
-        csdef_config="front-config/config1.toml"
     output:
         schedule="results/collect/front_defended/{sample_id}_{rep_id}/chaff_schedule.csv",
         rnd_seed="results/collect/front_defended/{sample_id}_{rep_id}/rnd_seed.txt"
@@ -69,7 +68,7 @@ checkpoint collect_front_defended:
             --pcap-file {output.pcap} -- --url-dependencies-from {input.url_dep} \
             > {output.stdout} 2> {log}
         
-        if tshark -r {output.pcap} -Y 'quic.frame_type in {{0x1c..0x1d}}' -Tfields -e 'quic.cc.reason_phrase' | grep -q kthx4shaping ; then
+        if tshark -r {output.pcap} -Y 'quic.frame_type in {{0x1c..0x1d}}' -Tfields -e 'quic.cc.reason_phrase' | grep -q -E 'kthx4shaping|kthxbye' ; then
             touch {output.success};
         fi
         """
