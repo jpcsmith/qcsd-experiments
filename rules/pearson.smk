@@ -23,29 +23,22 @@ rule pearson_front_dummy:
         """
 
 def pearson_front_dummy__all_input(wildcards):
-    import string
-    
     collect_dir = rules.collect_front_defended.output["success"] # points to the json
-    
+    collect_dir = collect_dir.replace("{sample_id}", "{{sample_id}}")
+    collect_dir = collect_dir.replace("{rep_id}", "{{rep_id}}")
+
     rootdir=config['rootdir']
     configdir=config['configdir']
     seeddir=config['seeddir']
-    class FormatDict(dict):
-        def __missing__(self, key):
-            return "{" + key + "}"
+    collect_dir = collect_dir.format(rootdir=rootdir, configdir=configdir, seeddir=seeddir)
     
-    formatter = string.Formatter()
-    mapping = FormatDict(rootdir=rootdir, configdir=configdir, seeddir=seeddir)
-    print(formatter.vformat(collect_dir, (), mapping))
-    collect_dir = formatter.vformat(collect_dir, (), mapping)
     s_ids = glob_wildcards(collect_dir).sample_id
     s_rep = glob_wildcards(collect_dir).rep_id
-
-    pearson_dir = rules.pearson_front_dummy.output["json"]
-    pearson_dir = formatter.vformat(pearson_dir, (), mapping)
+    roots=[rootdir]*len(s_ids)
+    configs=[configdir]*len(s_ids)
+    seeds=[seeddir]*len(s_ids)
     
-    return expand(pearson_dir, zip, sample_id=s_ids,
-            rep_id=s_rep)
+    return expand(rules.pearson_front_dummy.output["json"], zip, sample_id=s_ids, rep_id=s_rep, rootdir=roots, configdir=configs, seeddir=seeds)
 
 rule pearson_front_dummy__all:
     """Determine the number of samples collected and measures the
