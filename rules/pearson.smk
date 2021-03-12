@@ -31,7 +31,7 @@ def pearson_front_dummy__all_input(wildcards):
     configdir=config['configdir']
     seeddir=config['seeddir']
     collect_dir = collect_dir.format(rootdir=rootdir, configdir=configdir, seeddir=seeddir)
-    
+
     s_ids = glob_wildcards(collect_dir).sample_id
     s_rep = glob_wildcards(collect_dir).rep_id
     roots=[rootdir]*len(s_ids)
@@ -72,12 +72,24 @@ rule pearson_front_full:
 
 def pearson_aggregated_input(wildcards):
     collect_dir = rules.pearson_front_dummy.output[1] # points to the json
+    collect_dir = collect_dir.replace("{sample_id}", "{{sample_id}}")
+    collect_dir = collect_dir.replace("{rep_id}", "{{rep_id}}")
+
+    rootdir=config['rootdir']
+    configdir=config['configdir']
+    seeddir=config['seeddir']
+    collect_dir = collect_dir.format(rootdir=rootdir, configdir=configdir, seeddir=seeddir)
+
     s_ids = glob_wildcards(collect_dir).sample_id
     s_rep = glob_wildcards(collect_dir).rep_id
+    roots=[rootdir]*len(s_ids)
+    configs=[configdir]*len(s_ids)
+    seeds=[seeddir]*len(s_ids)
+    print(len(s_ids), len(s_rep))
     
 
     return expand(rules.pearson_front_dummy.output["json"], zip, sample_id=s_ids,
-            rep_id=s_rep)
+            rep_id=s_rep, rootdir=roots, configdir=configs, seeddir=seeds)
 
 def pearson_aggregated_full_input(wildcards):
     collect_dir = rules.pearson_front_full.output[1] # points to the json
@@ -90,12 +102,16 @@ def pearson_aggregated_full_input(wildcards):
 
 rule pearson_front_dummy_aggregated:
     """Aggregates results from pearson_front_dummy and pearson_front_full into one statistic"""
+    params:
+        rootdir=config['rootdir'],
+        configdir=config['configdir'],
+        seeddir=config['seeddir']
     input: pearson_aggregated_input
     output: 
-        plot = "results/pearson/front/aggregate/pearson_distribution.png",
-        json = "results/pearson/front/aggregate/res_dummy.json",
-        stdout = "results/pearson/front/aggregate/stdout.txt"
-    log: "results/pearson/front/aggregate/stderr.txt"
+        plot = "{rootdir}/results/pearson/front/{configdir}/{seeddir}/aggregate/pearson_distribution.png",
+        json = "{rootdir}/results/pearson/front/{configdir}/{seeddir}/aggregate/res_dummy.json",
+        stdout = "{rootdir}/results/pearson/front/{configdir}/{seeddir}/aggregate/stdout.txt"
+    log: "{rootdir}/results/pearson/front/{configdir}/{seeddir}/aggregate/stderr.txt"
     shell: """\
         python3 -m pyqcd.pearson.aggregate_pearson --output-plot {output.plot} --output-json {output.json} \
         -- {input} > {output.stdout} 2> {log}
