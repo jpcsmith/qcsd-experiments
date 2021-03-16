@@ -24,10 +24,10 @@ from collections import Counter, defaultdict
 from typing import Set, Tuple, Optional, Dict, Iterator, Any
 from itertools import chain
 
-import doceasy
 import pandas as pd
 
-import pyqcd
+import common
+from common import doceasy
 
 #: The minimum number of URLs in each dependency graph
 N_MININMUM_URLS = 6
@@ -229,7 +229,7 @@ def to_adjacency_list(fetch_output_generator, **kwargs) -> Iterator[set]:
 
 def main(infile: str, prefix: str, verbose: bool, groupby_connection: bool):
     """Filter browser URL request logs and extract dependency graphs."""
-    pyqcd.init_logging(int(verbose) + 1)
+    common.init_logging(int(verbose) + 1)
     _LOGGER.info("Running with arguments: %s.", locals())
 
     file_id = -1

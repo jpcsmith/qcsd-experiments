@@ -5,9 +5,9 @@ scattergather:
 rule depfetch_browser_image:
     """Build the browser image for determining URL dependencies."""
     input:
-        "docker/dep-fetch/Dockerfile",
-        "docker/dep-fetch/fetch-script",
-        "docker/dep-fetch/requirements.txt"
+        "resources/docker/dep-fetch/Dockerfile",
+        "resources/docker/dep-fetch/fetch-script",
+        "resources/docker/dep-fetch/requirements.txt"
     output:
         touch("results/determine-url-deps/.dep-fetch-build.done")
     shell: "docker build --tag dep-fetch docker/dep-fetch/"
@@ -16,15 +16,14 @@ rule depfetch_browser_image:
 rule depfetch_urls:
     "Extract the domains URLs to be fetched and prepend with https://."
     input:
-        "results/profile-domains/filtered-domains.csv"
+        "results/version-scan/scan-results.filtered.csv"
     output:
         "results/determine-url-deps/urls.txt"
     params:
         max_urls=config["max_fetch_urls"]
-    shell: """\
-        cut -d, -f2 {input} | sed '1d' | head -n {params.max_urls} \
-            | sed 's/^/https:\/\//' > {output}
-        """
+    shell:
+        "cut -d, -f2 {input} | sed '1d' | head -n {params.max_urls}"
+        " | sed 's/^/https:\/\//' > {output}"
 
 
 rule depfetch_split:
@@ -32,13 +31,12 @@ rule depfetch_split:
     input:
         rules.depfetch_urls.output
     output:
-        scatter.depfetch("results/determine-url-deps/urls.txt.d/{scatteritem:02d}.txt")
+        scatter.depfetch("results/determine-url-deps/urls.txt.d/{scatteritem}.txt")
     params:
         n_splits=lambda _: len(scatter.depfetch("{scatteritem}"))
-    shell: """\
-        split --suffix-length=2 -d --additional-suffix=.txt --number=l/{params.n_splits} \
-            {input} 'results/determine-url-deps/urls.txt.d/'
-        """
+    shell:
+        "split --suffix-length=2 -d --additional-suffix=.txt --number=l/{params.n_splits}"
+        " {input} 'results/determine-url-deps/urls.txt.d/'"
 
 
 rule url_dependencies__part:
@@ -56,7 +54,7 @@ rule url_dependencies__part:
 rule url_dependencies:
     """Combine the URL dependency parts into a single file."""
     input:
-        gather.depfetch("results/determine-url-deps/browser-logs.json.d/{scatteritem:02d}.json")
+        gather.depfetch("results/determine-url-deps/browser-logs.json.d/{scatteritem}.json")
     output:
         protected("results/determine-url-deps/browser-logs.json.gz")
     shell: "cat {input} | gzip --to-stdout > {output}"
@@ -70,7 +68,6 @@ checkpoint url_dependencies__csv:
         prefix=directory("results/determine-url-deps/dependencies")
     log:
         "results/determine-url-deps/dependencies.log"
-    shell: """\
-        mkdir -p {output} \
-        && python3 -m pyqcd.url_dependency_graph {input} '{output.prefix}/' 2> {log}
-        """
+    shell:
+        "mkdir -p {output}"
+        " && python3 workflow/scripts/url_dependency_graph {input} '{output.prefix}/' 2> {log}"

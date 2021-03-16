@@ -7,3 +7,6 @@ quic_versions: ["h3-29"]
 
 # Second level domains that whose representation in the dataset are reduced
 frequent_slds: ["blogspot.com", "appspot.com", "myshopify.com"]
+
+# The maximum number of URLs to attempt to fetch
+max_fetch_urls: 1000
