@@ -1,0 +1,9 @@
+---
+# The Alexa top list, http://s3.amazonaws.com/alexa-static/top-1m.csv.zip
+alexa_list: resources/alexa-top10-2021-03-12.csv.gz
+
+# Versions of QUIC supported in our experiments
+quic_versions: ["h3-29"]
+
+# Second level domains that whose representation in the dataset are reduced
+frequent_slds: ["blogspot.com", "appspot.com", "myshopify.com"]
