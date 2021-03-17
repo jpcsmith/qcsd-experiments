@@ -22,8 +22,9 @@ from dataclasses import dataclass
 from typing import Optional, Union, Tuple, NamedTuple
 from ipaddress import IPv4Address, IPv6Address, ip_address
 
-import doceasy
 from lab.sniffer import TCPDumpPacketSniffer
+
+from common import doceasy
 
 
 @contextlib.contextmanager

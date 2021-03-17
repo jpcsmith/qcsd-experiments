@@ -1,6 +1,6 @@
 from ipaddress import IPv4Address, IPv6Address
 
-from .neqo_capture_client import extract_endpoints
+from neqo_capture_client import extract_endpoints
 
 
 def test_extract_endpoints_ipv4():
