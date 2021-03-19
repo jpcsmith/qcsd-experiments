@@ -2,5 +2,7 @@ configfile: "config/config.yaml"
 
 
 include: "rules/alexa.smk"
+include: "rules/schedules.smk"
 include: "rules/version-scan.smk"
 include: "rules/determine-url-deps.smk"
+include: "rules/neqo-request.smk"
