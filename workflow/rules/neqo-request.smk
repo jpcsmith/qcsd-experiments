@@ -32,9 +32,6 @@ def excess_msd_collect_all__inputs(wildcards):
     dep_directory = checkpoints.url_dependencies__csv.get(**wildcards).output[0]
     sample_ids = glob_wildcards(dep_directory + "/{sample_id}.csv").sample_id
 
-    # TODO: Remove this
-    sample_ids = sample_ids[:50]
-
     emsd_config = config["experiment"]["excess_msd"]
     repetitions = [f"{rep:02d}" for rep in range(emsd_config["repetitions"])]
     return expand(rules.excess_msd_collect.output["pcap"], sample_id=sample_ids,
