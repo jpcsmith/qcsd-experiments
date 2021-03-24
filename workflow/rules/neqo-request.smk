@@ -18,6 +18,7 @@ rule excess_msd_collect:
         "results/excess_msd/{excess_msd}/{sample_id}_{rep_id}/stderr.txt"
     params:
         msd_limit_excess="{excess_msd}"
+    threads: 2
     shell:
         "RUST_LOG={config[neqo_log_level]}"
         " python3 workflow/scripts/neqo_capture_client.py --pcap-file {output.pcap}"

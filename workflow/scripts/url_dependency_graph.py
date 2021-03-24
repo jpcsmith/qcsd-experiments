@@ -55,23 +55,27 @@ def _extract_edges(log_message, edges):
     if request["method"] != "GET":
         return
 
+    def _add_edge_with(dependency):
+        if dependency != request["url"]:
+            edges.add((dependency, request["url"]))
+
     # Add an edge for the initiator if specified
     initiator = log_message["params"]["initiator"]
     if "url" in initiator:
         assert initiator["url"] is not None
-        edges.add((initiator["url"], request["url"]))
+        _add_edge_with(initiator["url"])
 
     # Add for each JS script that was traversed as they're indirect requirements
     if "stack" in initiator:
         for stack_entry in initiator["stack"]["callFrames"]:
-            edges.add((stack_entry["url"], request["url"]))
+            _add_edge_with(stack_entry["url"])
 
     # Add an edge for the referer defaulting to None if no edge was added for
     # this request URL yet.
     if "Referer" in request["headers"]:
-        edges.add((request["headers"]["Referer"], request["url"]))
+        _add_edge_with(request["headers"]["Referer"])
     elif not is_target(request["url"], edges):
-        edges.add((None, request["url"]))
+        _add_edge_with(None)
 
 
 def is_valid_edge(edge, valid_nodes) -> bool:
