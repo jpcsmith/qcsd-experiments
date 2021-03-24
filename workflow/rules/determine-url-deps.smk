@@ -71,4 +71,5 @@ checkpoint url_dependencies__csv:
         "results/determine-url-deps/dependencies.log"
     shell:
         "mkdir -p {output}"
-        " && python3 workflow/scripts/url_dependency_graph {input} '{output.prefix}/' 2> {log}"
+        " && python3 workflow/scripts/url_dependency_graph.py {input} '{output.prefix}/'"
+        " 2> {log}"
