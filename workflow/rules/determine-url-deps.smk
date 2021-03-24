@@ -10,7 +10,7 @@ rule depfetch_browser_image:
         "resources/docker/dep-fetch/requirements.txt"
     output:
         touch("results/determine-url-deps/.dep-fetch-build.done")
-    shell: "docker build --tag dep-fetch docker/dep-fetch/"
+    shell: "docker build --tag dep-fetch resources/docker/dep-fetch/"
 
 
 rule depfetch_urls:
