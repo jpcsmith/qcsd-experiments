@@ -36,5 +36,5 @@ rule alexa:
     input:
         expand([
             "resources/alexa-1m-{date}.csv.gz", "resources/alexa-top10-{date}.csv.gz",
-            "resources/alexa-top100-{date}.csv.gz"
+            "resources/alexa-top100-{date}.csv.gz", "resources/alexa-top1000-{date}.csv.gz",
         ], date=dt.today().strftime('%Y-%m-%d'))

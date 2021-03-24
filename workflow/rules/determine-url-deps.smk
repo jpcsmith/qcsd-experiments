@@ -32,11 +32,9 @@ rule depfetch_split:
         rules.depfetch_urls.output
     output:
         scatter.depfetch("results/determine-url-deps/urls.txt.d/{scatteritem}.txt")
-    params:
-        n_splits=lambda _: len(scatter.depfetch("{scatteritem}"))
-    shell:
-        "split --suffix-length=2 -d --additional-suffix=.txt --number=l/{params.n_splits}"
-        " {input} 'results/determine-url-deps/urls.txt.d/'"
+    run:
+        for i, name in enumerate(output):
+            shell("split -n'l/%d/%d' {input} > %s" % (i+1, len(output), output[i]))
 
 
 rule url_dependencies__part:
