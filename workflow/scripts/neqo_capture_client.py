@@ -83,6 +83,9 @@ def _embed_tls_keys(pcap_bytes: bytes, keylog_file: str) -> bytes:
     """Embed TLS keys and return a pcapng file with the embedded
     secrets.
     """
+    with open(keylog_file, "r") as keylog:
+        assert len(keylog.read().strip()) > 0
+
     result = subprocess.run([
         "editcap",
         "--inject-secrets", f"tls,{keylog_file}",
@@ -123,21 +126,29 @@ def extract_endpoints(neqo_output: str) -> Tuple[Endpoint, Endpoint]:
             Endpoint(ip_address(match["rip"]), int(match["rport"])))
 
 
-def _filter_packets(pcap_bytes: bytes, neqo_output: str) -> bytes:
+def _filter_packets(
+    pcap_bytes: bytes, neqo_output: str, ignore_errors: bool
+) -> bytes:
     """Filter the packets to the IPs and ports extracted from
     neqo_output and return a pcapng with the data.
     """
-    (local, remote) = extract_endpoints(neqo_output)
-
-    dst_ver = "ipv6" if remote.ip.version == 6 else "ip"
-    result = subprocess.run([
-        "tshark",
-        "-r", "-",
-        "-w", "-", "-F", "pcapng",
+    try:
+        (local, remote) = extract_endpoints(neqo_output)
+    except ValueError:
+        if not ignore_errors:
+            raise
+        display_filter = "udp.port"
+    else:
+        dst_ver = "ipv6" if remote.ip.version == 6 else "ip"
         # Filter to packets from the remote ip and local port
         # Exclude the local IP as this may change depending on the vantage point
-        "-Y", (f"{dst_ver}.addr=={remote.ip} and udp.port=={remote.port} "
-               f"and udp.port=={local.port}")
+        display_filter = (
+            f"{dst_ver}.addr=={remote.ip} and udp.port=={remote.port}"
+            f" and udp.port=={local.port}"
+        )
+
+    result = subprocess.run([
+        "tshark", "-r", "-", "-w", "-", "-F", "pcapng", "-Y", display_filter
     ], check=True, input=pcap_bytes, stdout=PIPE)
 
     # Ensure that the result is neither none nor empty
@@ -153,8 +164,8 @@ def main(neqo_args, pcap_file: Optional[str], ignore_errors: bool):
                               ignore_errors=ignore_errors)
 
         if pcap_file is not None:
-            if result.is_success:
-                pcap_bytes = _filter_packets(sniffer.pcap(), result.output)
+            pcap_bytes = _filter_packets(sniffer.pcap(), result.output,
+                                         ignore_errors=(not result.is_success))
             pcap_bytes = _embed_tls_keys(pcap_bytes, keylog.name)
 
             with open(pcap_file, mode="wb") as pcap:

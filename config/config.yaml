@@ -13,10 +13,10 @@ max_fetch_urls: 1000
 
 # The log level passed to RUST_LOG for the neqo-client
 # neqo_log_level: "neqo_transport=info,neqo_csdef=trace"
-neqo_log_level: "neqo=trace"
+neqo_log_level: "neqo=trace,neqo_transport=trace"
 
 experiment:
   excess_msd:
     repetitions: 1
     padding: { rate: 1, duration: 10, interval: 5 }  # Mbps, seconds, milliseconds
-    excess_values: [ 16, 100, 500, 1000, 1500, 2000]
+    excess_values: [ 16, 500, 1000, 1500, 2000, 3000]
