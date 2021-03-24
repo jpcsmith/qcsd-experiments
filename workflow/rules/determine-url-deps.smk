@@ -46,7 +46,9 @@ rule url_dependencies__part:
         "results/determine-url-deps/browser-logs.json.d/{scatteritem}.json"
     log:
         "results/determine-url-deps/browser-logs.json.d/{scatteritem}.log"
-    shell: "scripts/docker-dep-fetch --max-attempts 1 {input.domains} > {output} 2> {log}"
+    shell:
+        "workflow/scripts/docker-dep-fetch --max-attempts 1"
+        " {input.domains} > {output} 2> {log}"
 
 
 rule url_dependencies:
