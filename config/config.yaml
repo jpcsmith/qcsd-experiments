@@ -18,6 +18,6 @@ neqo: "/Users/luca/Documents/ETHZ/Thesis/code/neqo-qcd/"
 # Root directory containing "results" folder
 rootdir: "/Volumes/Isis/Thesis/qcd-experiments"
 # current seed working on for aggregated data
-seeddir: "baddcafe"
+seeddir: "ba0bab"
 # current config working on for aggregated data
-configdir: "config1"
+configdir: "config4"
