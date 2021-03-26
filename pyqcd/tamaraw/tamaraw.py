@@ -8,14 +8,13 @@
 
 import math
 import random
-from time import strftime
 import argparse
 import logging
-import numpy as np
 import pandas as pd
 import sys
-import os
 
+
+random.seed(0xdeadbeef)
 
 logger = logging.getLogger('tamaraw')
 
@@ -108,7 +107,7 @@ def Anoa(list1, list2, parameters):  # inputpacket, outputpacket, parameters
         parameters[0] += "Tolerance: 2x."
     listind = 0  # marks the next packet to send
     while (listind < len(list1)):
-        #decide which packet to send
+        # decide which packet to send
         if times[0] + AnoaTime([0, method, times[0]-starttime]) < times[1] + AnoaTime([1, method, times[1]-starttime]):
             cursign = 0
         else:
@@ -138,11 +137,9 @@ def parse_arguments():
     # conf_parser = configparser.RawConfigParser()
     # conf_parser.read(ct.CONFIG_FILE)
 
-    parser = argparse.ArgumentParser(description='It simulates tamaraw on a set of web traffic traces.')
-
-    # parser.add_argument('traces_path',
-    #                     metavar='<traces path>',
-    #                     help='Path to the directory with the traffic traces to be simulated.')
+    parser = argparse.ArgumentParser(
+            description='It simulates tamaraw on a web traffic trace.'
+            )
 
     parser.add_argument('output_path',
                         metavar='<output path>',
@@ -193,7 +190,7 @@ def load_trace(filename):
     return data
 
 
-def create_target(fname, output):
+def create_target(fname):
     logger.info('Simulating %s...' % fname)
     baseline = load_trace(fname)
     baseline = baseline.values
@@ -203,8 +200,8 @@ def create_target(fname, output):
     parameters = [""]
 
     Anoa(baseline, list2, parameters)
-    list2 = sorted(list2, key = lambda list2: list2[0])
-    anoad.append(list2)
+    list2 = sorted(list2, key=lambda list2: list2[0])
+    # anoad.append(list2)
 
     print("list2 len: ", len(list2))
 
@@ -213,11 +210,6 @@ def create_target(fname, output):
     AnoaPad(list2, list3, PadL, 0)
 
     print("list3 len: ", len(list3))
-
-    # fout = open(output, "w")
-    # for x in list3:
-    #     fout.write(str(x[0]) + "," + str(x[1]) + "\n")
-    # fout.close()
 
     # sizes:
     old = sum([abs(p[1]) for p in baseline])
@@ -231,21 +223,8 @@ def create_target(fname, output):
 if __name__ == '__main__':
     args = parse_arguments()
     logger.info("Arguments: %s" % (args))
-    foldout = args.output_path
+    fout = args.output_path
 
-    packets = []
-    desc = ""
-    anoad = []
-    anoadpad = []
-    latencies = []
-    sizes = []
-    bandwidths = []
+    target = create_target(args.baseline_path)
 
-    tot_new_size = 0.0
-    tot_new_latency = 0.0
-    tot_old_size = 0.0
-    tot_old_latency = 0.0
-
-    target = create_target(args.baseline_path, args.output_path)
-
-    pd.DataFrame(target).to_csv(args.output_path, index=False, header=False)
+    pd.DataFrame(target).to_csv(fout, index=False, header=False)

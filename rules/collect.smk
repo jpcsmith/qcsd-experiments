@@ -63,7 +63,6 @@ checkpoint collect_front_defended:
         cap_iface=1
     shell: """\
         CSDEF_DUMMY_ID={output.dummy_ids} CSDEF_INPUT_TRACE={input.schedule} CSDEF_DUMMY_SCHEDULE={output.sampled_schedule} \
-        CSDEF_SHAPER_CONFIG={csdef_config} \
         RUST_LOG=neqo_transport=info,debug python3 -m pyqcd.collect.neqo_capture_client \
             --pcap-file {output.pcap} -- --url-dependencies-from {input.url_dep} \
             > {output.stdout} 2> {log}
@@ -88,6 +87,33 @@ checkpoint collect_front_baseline:
         CSDEF_NO_SHAPING=1 RUST_LOG=neqo_transport=info,debug \
         python3 -m pyqcd.collect.neqo_capture_client --pcap-file {output.pcap} \
                 -- --url-dependencies-from {input} > {output.stdout} 2> {log}
+        """
+
+checkpoint collect_tamaraw_defended:
+    """Collect defended QUIC traces shaped with the Tamaraw defence."""
+    input:
+        url_dep="results/determine-url-deps/dependencies/{sample_id}.csv",
+        schedule="results/collect/tamaraw_defended/{sample_id}_{rep_id}/shape_schedule.csv"
+    output:
+        stdout="results/collect/tamaraw_defended/{sample_id}_{rep_id}/stdout.txt",
+        dummy_ids="results/collect/tamaraw_defended/{sample_id}_{rep_id}/dummy_streams.txt",
+        sampled_schedule="results/collect/tamaraw_defended/{sample_id}_{rep_id}/schedule.csv",
+        pcap="results/collect/tamaraw_defended/{sample_id}_{rep_id}/trace.pcapng",
+        success = "results/collect/tamaraw_defended/{sample_id}_{rep_id}/success_collect",
+    log:
+        "results/collect/tamaraw_defended/{sample_id}_{rep_id}/stderr.txt"
+    resources:
+        cap_iface=1
+    shell: """\
+        CSDEF_DUMMY_ID={output.dummy_ids} CSDEF_INPUT_TRACE_S={input.schedule} CSDEF_DUMMY_SCHEDULE={output.sampled_schedule} \
+        CSDEF_SHAPER_CONFIG={csdef_config} \
+        RUST_LOG=neqo_transport=info,debug python3 -m pyqcd.collect.neqo_capture_client \
+            --pcap-file {output.pcap} -- --url-dependencies-from {input.url_dep} \
+            > {output.stdout} 2> {log}
+        
+        if tshark -r {output.pcap} -Y 'quic.frame_type in {{0x1c..0x1d}}' -Tfields -e 'quic.cc.reason_phrase' | grep -q -E 'kthx4shaping|kthxbye' ; then
+            touch {output.success};
+        fi
         """
 
 rule front_baseline_csv:
@@ -133,6 +159,21 @@ rule front_chaff_csv:
             parse_quic.parse_chaff_traffic(str(input.pcap), str(input.dummy_ids))
         ).to_csv(str(output), header=True, index=False)
 
+rule tamaraw_target_csv:
+    """Creates the tamaraw target schedule from the baseline"""
+    input:
+        baseline=rules.front_baseline_csv.output[0],
+    output:
+        "results/collect/tamaraw_defended/{sample_id}_{rep_id}/shape_schedule.csv"
+    log:
+        "results/collect/tamaraw_defended/{sample_id}_{rep_id}/shape_schedule.txt"
+    run:
+        import pandas as pd
+        from pyqcd.tamaraw import tamaraw as tw
+
+        pd.DataFrame(
+            tw.create_target(str(input.baseline))
+        ).to_csv(str(output), index=False, header=False)
 
 def collect_front_defended__all_input(wildcards):
     input_dir = checkpoints.url_dependencies__csv.get(**wildcards).output[0]
