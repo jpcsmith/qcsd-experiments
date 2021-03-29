@@ -14,7 +14,7 @@ import pandas as pd
 import sys
 
 
-random.seed(0xdeadbeef)
+random.seed(0x54054)
 
 logger = logging.getLogger('tamaraw')
 
@@ -65,6 +65,10 @@ def AnoaPad(list1, list2, padL, method):
             lengths[1] += 1
             times[1] = x[0]
         list2.append(x)
+    logger.debug("last timestamp: %f" % list1[-1][0])
+    logger.debug("Number of TX packets (w/o pad): %d" % lengths[0])
+    logger.debug("Number of RX packets (w/o pad): %d" % lengths[1])
+    
 
     paddings = []
 
@@ -72,6 +76,7 @@ def AnoaPad(list1, list2, padL, method):
         curtime = times[j]
         # 1/2 1, 1/4 2, 1/8 3, ... #check this
         topad = -int(math.log(random.uniform(0.00001, 1), 2) - 1)
+        logger.debug("topad: %d" % topad)
         if (method == 0):
             if padL == 0:
                 topad = 0
@@ -174,7 +179,7 @@ def config_logger(args):
     logger.addHandler(ch)
 
     # Set level format
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
 
 
 def load_trace(filename):
@@ -216,6 +221,11 @@ def create_target(fname):
     mid = sum([abs(p[1]) for p in list2])
     new = sum([abs(p[1]) for p in list3])
     logger.info("old size:%d,mid size:%d, new size:%d" % (old, mid, new))
+
+    old_rx = sum([abs(p[1]) if p[1]<0 else 0 for p in baseline])
+    old_tx = sum([p[1] if p[1]>=0 else 0 for p in baseline])    
+    logger.info("rx size:%d,mtx size:%d" % (old_rx, old_tx))
+
 
     return list3
 

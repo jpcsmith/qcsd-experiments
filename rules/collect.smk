@@ -203,6 +203,13 @@ def collect_front_baseline_single__all_input(wildcards):
     return expand(rules.collect_front_baseline.output["pcap"], sample_id=sample_ids,
                   rep_id=0)
 
+def collect_tamaraw_defended__all_input(wildcards):
+    input_bas = rules.collect_front_baseline.output["pcap"] # trace.pacapng
+    s_ids_bas = glob_wildcards(input_bas).sample_id
+    r_ids_bas = glob_wildcards(input_bas).rep_id
+
+    return expand(rules.collect_tamaraw_defended.output["pcap"], zip, sample_id=s_ids_bas, rep_id=r_ids_bas)
+
 
 rule collect_front_defended__all:
     """Determines the number of URLs samples to be collected and starts the
@@ -227,6 +234,13 @@ rule collect_front_baseline_single__all:
     collection."""
     input: collect_front_baseline_single__all_input
     message: "rule collect_front_baseline__all:\n\tConvenience method for collecting the FRONT baseline samples"
+
+rule collect_tamaraw_defended__all:
+    """Determines the number of URLs samples to be collected and starts the
+    collection."""
+    input: collect_tamaraw_defended__all_input
+    message: "rule collect_tamaraw_defended__all:\n\tConvenience method for collecting the Tamaraw defended samples"
+
 
 rule successful_collection:
     """From the trace pcap, determines if the collection completed successfully,
