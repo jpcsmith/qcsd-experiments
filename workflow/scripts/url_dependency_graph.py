@@ -9,10 +9,6 @@ CSV adjancency list of the pairs (dependency URL, URL), and are written
 to the files PREFIX000.csv, PREFIX001.csv ...
 
 Options:
-    --groupby-connection
-        Group the URLs for each request by the logged connection ID
-        instead of by the URL's origin as is done in neqo-client.
-
     -v, --verbose
         Output more log messages.
 """
@@ -20,17 +16,16 @@ import json
 import gzip
 import logging
 import urllib.parse
-from collections import Counter, defaultdict
-from typing import Set, Tuple, Optional, Dict, Iterator, Any
-from itertools import chain
-
-import pandas as pd
+from collections import Counter
+from typing import Set, Optional, Iterator, Dict, List
+from pathlib import Path
+import networkx as nx
 
 import common
 from common import doceasy
 
 #: The minimum number of URLs in each dependency graph
-N_MININMUM_URLS = 6
+N_MININMUM_URLS = 1
 #: Allow error codes for too many requests (429) and server timeout (522) since
 #: these are transient.
 ALLOWED_HTTP_ERRORS = [429, 522, ]
@@ -38,214 +33,170 @@ ALLOWED_HTTP_ERRORS = [429, 522, ]
 _LOGGER = logging.getLogger("url-dep-graph")
 
 
-def is_target(node, edges) -> bool:
-    """Return true iff the node is a target in the graph."""
-    for (_, target) in edges:
-        if node == target:
+def origin(url: str) -> str:
+    """Return the origin of the URL."""
+    parts = urllib.parse.urlsplit(url)
+    return f"{parts[0]}://{parts[1]}"
+
+
+class _DependencyGraph:
+    def __init__(self, browser_log, origin_: Optional[str] = None):
+        self.logs = browser_log
+        self.origin = origin_
+        self.graph = nx.DiGraph()
+        self._ignored_requests: Set[str] = set()
+
+        self._construct()
+
+    def _construct(self):
+        msgs = self.logs["http_trace"]
+        msgs.sort(key=lambda msg: msg["timestamp"])
+
+        for msg in msgs:
+            msg = msg["message"]["message"]
+
+            if msg["method"] == "Network.requestWillBeSent":
+                self._handle_request(msg)
+            elif msg["method"] == "Network.responseReceived":
+                self._handle_response(msg)
+            else:
+                continue
+        assert len(list(nx.simple_cycles(self.graph))) == 0
+        assert len(list(nx.nodes_with_selfloops(self.graph))) == 0
+
+        if origin is not None:
+            to_drop = [node for node, node_origin in self.graph.nodes("origin")
+                       if node_origin != self.origin]
+            self.graph.remove_nodes_from(to_drop)
+            assert len(self.graph) > 0
+
+        self.graph = nx.relabel_nodes(self.graph, mapping={
+            node: i for (i, node) in enumerate(self.graph)
+        })
+
+    def to_json(self) -> str:
+        """Convert the graph to json."""
+        return json.dumps(nx.node_link_data(self.graph), indent=2)
+
+    def roots(self) -> List[str]:
+        """Return the roots of the graph."""
+        return [node for node, degree in self.graph.in_degree() if degree == 0]
+
+    def _handle_response(self, msg):
+        assert msg["method"] == "Network.responseReceived"
+        node_id = msg["params"]["requestId"]
+        if node_id in self._ignored_requests:
+            return
+        self.graph.nodes[node_id]["done"] = True
+
+    def _find_node_by_url(self, url: str) -> Optional[str]:
+        """Find the most recent node associated with a get request."""
+        nodes = [node for (node, data) in self.graph.nodes(data=True)
+                 if data['url'] == url and data["done"]]
+
+        assert len(nodes) >= 1
+        # Return the last node that was added
+        return nodes[-1]
+
+    def _add_origin_dependency(self, dep: str, node_id):
+        """Add a dependency for node_id to the root with the same
+        origin as dep.
+        """
+        root_node = next((root for root in self.roots()
+                          if self.graph.nodes[root]["origin"] == origin(dep)),
+                         None)
+        assert root_node is not None
+        self.graph.add_edge(root_node, node_id)
+
+    def _add_dependency(self, dep, node_id) -> bool:
+        if not dep.startswith("http"):
             return True
-    return False
+        if dep_node := self._find_node_by_url(dep):
+            self.graph.add_edge(dep_node, node_id)
+            return True
+        return False
 
+    def _handle_request(self, msg):
+        assert msg["method"] == "Network.requestWillBeSent"
 
-def _extract_edges(log_message, edges):
-    """Add an edge for the referer, initiator, and any scripts executed."""
-    if log_message["method"] != "Network.requestWillBeSent":
-        return
+        request = msg["params"]["request"]
+        node_id = msg["params"]["requestId"]
 
-    request = log_message["params"]["request"]
-    if request["method"] != "GET":
-        return
-
-    def _add_edge_with(dependency):
-        if dependency != request["url"]:
-            edges.add((dependency, request["url"]))
-
-    # Add an edge for the initiator if specified
-    initiator = log_message["params"]["initiator"]
-    if "url" in initiator:
-        assert initiator["url"] is not None
-        _add_edge_with(initiator["url"])
-
-    # Add for each JS script that was traversed as they're indirect requirements
-    if "stack" in initiator:
-        for stack_entry in initiator["stack"]["callFrames"]:
-            _add_edge_with(stack_entry["url"])
-
-    # Add an edge for the referer defaulting to None if no edge was added for
-    # this request URL yet.
-    if "Referer" in request["headers"]:
-        _add_edge_with(request["headers"]["Referer"])
-    elif not is_target(request["url"], edges):
-        _add_edge_with(None)
-
-
-def is_valid_edge(edge, valid_nodes) -> bool:
-    """Returns true iff all non-None edges are in valid_nodes."""
-    dependency, target = edge
-    return ((dependency is None or dependency in valid_nodes)
-            and (target in valid_nodes))
-
-
-class _UrlGrouper:
-    """Group URLs by either their connection id or origin."""
-    def __init__(self, groupby_connection: bool):
-        self._connections: Dict[Any, Set[str]] = defaultdict(set)
-        self._use_origin = not groupby_connection
-
-    def maybe_add(self, log_message):
-        """Track the URL in the log message if it represents a received
-        response.
-        """
-        if log_message["method"] != "Network.responseReceived":
+        if request["method"] != "GET" or not request["url"].startswith("http"):
+            self._ignored_requests.add(node_id)
             return
 
-        response = log_message["params"]["response"]
-        if (response["status"] >= 400 and response["status"] not in
-                ALLOWED_HTTP_ERRORS):
-            return
+        self.graph.add_node(
+            node_id, url=request["url"], done=False, type=msg["params"]["type"],
+            origin=origin(request["url"]))
 
-        key = response["connectionId"]
-        if self._use_origin:
-            parse = urllib.parse.urlsplit(response["url"])
-            key = (parse.scheme, parse.netloc)
+        if msg["params"]["documentURL"] != request["url"]:
+            assert self._add_dependency(msg["params"]["documentURL"], node_id)
 
-        self._connections[key].add(response["url"])
+        if initiator_url := msg["params"]["initiator"].get("url", None):
+            assert self._add_dependency(initiator_url, node_id)
 
-    def get_group_by_origin(self, url: str) -> Set[str]:
-        """Returns the group of URLs that are associated with
-        the origin of provided URL.
-        """
-        parse = urllib.parse.urlsplit(url)
-
-        if self._use_origin:
-            return self._connections[(parse.scheme, parse.netloc)]
-
-        # Sometimes the above URL and the URLs in the connections differ by
-        # a suffix as /, /#, or /#!/ (angular), so only consider the netloc.
-        base_url = "{parse.scheme}://{parse.netloc}"
-        return next(urls for urls in self._connections.values()
-                    if any(url.startswith(base_url) for url in urls))
+        if stack := msg["params"]["initiator"].get("stack", None):
+            for stack_frame in stack["callFrames"]:
+                assert self._add_dependency(stack_frame["url"], node_id)
 
 
-def _to_adjacency_list(
-    fetch_output, groupby_connection: bool
-) -> Set[Tuple[Optional[str], str]]:
-    """Return an adjacency list of (dependency, url) for the provided
-    fetch results.
-    """
-    assert fetch_output["status"] == "success"
-
-    # Set of (dependency, url) forming the edges of the graph
-    edges: Set[Tuple[Optional[str], str]] = set()
-
-    connections = _UrlGrouper(groupby_connection)
-
-    # Dictionary of (scheme, host, port) -> URL to determine which URLs share
-    # the same origin. Used instead of the connectionId since this is the method
-    # that neqo-client uses.
-
-    for log_message in fetch_output["http_trace"]:
-        _extract_edges(log_message["message"]["message"], edges)
-        connections.maybe_add(log_message["message"]["message"])
-    assert edges
-
-    # Select the connection group that contains the final url
-    valid_nodes = connections.get_group_by_origin(fetch_output["final_url"])
-
-    # Drop edges that contain an invalid node
-    final_edges = set(e for e in edges if is_valid_edge(e, valid_nodes))
-
-    return _check_graph(final_edges, fetch_output["final_url"])
-
-
-def _check_graph(edges, url: str):
-    """Check our assumptions about the resulting graph from the adjacency
-    list.
-    """
-    # Skip checking if the edge list is empty
-    if not edges:
-        return edges
-
-    root_nodes = set(s for (s, t) in edges) - set(t for (s, t) in edges)
-    if len(root_nodes) > 1:
-        _LOGGER.warning("Dropping %r as there are two root nodes: %r", url,
-                        root_nodes)
-        return set()
-
-    # If there is a single non-None root node, add the None root node
-    if len(root_nodes) == 1 and None not in root_nodes:
-        root = root_nodes.pop()
-        _LOGGER.debug("Adding root edge None->%s for %r", root, url)
-        edges.add((None, root))
-
-    # Check that there is only URL which is initiated by the "user"
-    n_initiated = sum(1 for e in edges if e[0] is None)
-    if n_initiated != 1:
-        _LOGGER.warning("Dropping %r as there are %d user-initated nodes.",
-                        url, n_initiated)
-        return set()
-
-    return edges
-
-
-def to_adjacency_list(fetch_output_generator, **kwargs) -> Iterator[set]:
-    """Filter and generate non-empty adjacency lists from the input
+def extract_graphs(fetch_output_generator) -> Iterator[nx.DiGraph]:
+    """Filter and generate non-empty graphs from the input
     generated of fetch results.
     """
     seen_urls = set()
-    duplicate_counter: Counter = Counter()
-    n_insufficient = 0
+    dropped_urls: Dict[str, Counter] = {
+        "duplicate": Counter(),
+        "disconnected": Counter(),
+        "insufficient": Counter(),
+    }
 
-    for fetch_output in fetch_output_generator:
-        url = fetch_output["final_url"]
+    for result in fetch_output_generator:
+        url = result["final_url"]
 
-        if fetch_output["status"] != "success":
+        if result["status"] != "success":
             _LOGGER.debug(
-                "Dropping %r with a status of %r.", url, fetch_output["status"])
+                "Dropping %r with a status of %r.", url, result["status"])
             continue
-
         if not url.startswith("https"):
             _LOGGER.warning("Dropping %r as it is not HTTPS.", url)
             continue
-
         if url in seen_urls:
             _LOGGER.debug("Dropping %r as it was already encountered.", url)
-            duplicate_counter[url] += 1
+            dropped_urls["duplicate"][url] += 1
             continue
 
-        if not (edges := _to_adjacency_list(fetch_output, **kwargs)):
-            continue
+        graph = _DependencyGraph(result, origin(url))
 
-        n_urls = len(set(chain.from_iterable(edges)))
-        # The +1 accounts for the presence of the empty root URL
-        if n_urls < (N_MININMUM_URLS + 1):
+        if len(graph.roots()) > 1:
+            _LOGGER.debug("Dropping %r as it is disconnected.", url)
+            dropped_urls["disconnected"][url] += 1
+        elif len(graph.graph.nodes) < N_MININMUM_URLS:
             _LOGGER.debug("Dropping %r as it has only %d/%d required URLs.",
-                          url, n_urls, N_MININMUM_URLS)
-            n_insufficient += 1
-            continue
+                          url, len(graph.graph.nodes), N_MININMUM_URLS)
+            dropped_urls["insufficient"][url] += 1
+        else:
+            yield graph
+            seen_urls.add(url)
 
-        yield edges
-        seen_urls.add(url)
-
-    _LOGGER.info("Dropped duplicates: %s.", dict(duplicate_counter))
-    _LOGGER.info("Dropped %d URLs with less than the %d minimum URLs.",
-                 n_insufficient, N_MININMUM_URLS)
+    for type_ in ("duplicate", "disconnected", "insufficient"):
+        counters = dropped_urls[type_]
+        _LOGGER.debug("Dropped %s urls: %s", type_, dict(counters))
+        _LOGGER.info("Dropped %s urls: %d", type_, sum(counters.values()))
 
 
-def main(infile: str, prefix: str, verbose: bool, groupby_connection: bool):
+def main(infile: str, prefix: str, verbose: bool):
     """Filter browser URL request logs and extract dependency graphs."""
     common.init_logging(int(verbose) + 1)
     _LOGGER.info("Running with arguments: %s.", locals())
 
     file_id = -1
     with gzip.open(infile, mode="r") as json_lines:
-        for file_id, edges in enumerate(
-            to_adjacency_list((json.loads(line) for line in json_lines),
-                              groupby_connection=groupby_connection)
-        ):
-            frame = pd.DataFrame(edges, columns=["dependency", "url"])
-            frame[["url", "dependency"]].to_csv(
-                f"{prefix}{file_id:03d}.csv", header=False, index=False)
+        results = (json.loads(line) for line in json_lines)
 
+        for file_id, graph in enumerate(extract_graphs(results)):
+            Path(f"{prefix}{file_id:03d}.json").write_text(graph.to_json())
     _LOGGER.info("Script complete. Extracted %d dependency graphs.", file_id+1)
 
 
@@ -254,5 +205,4 @@ if __name__ == "__main__":
         "INFILE": str,
         "PREFIX": doceasy.Or(str, doceasy.Use(lambda _: "x")),
         "--verbose": bool,
-        "--groupby-connection": bool
     }))
