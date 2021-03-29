@@ -30,7 +30,7 @@ rule excess_msd_collect:
 
 
 def excess_msd_collect_all__inputs(wildcards):
-    dep_directory = checkpoints.url_dependency_graph.get(**wildcards).output[0]
+    dep_directory = checkpoints.url_dependency_graphs.get(**wildcards).output[0]
     sample_ids = glob_wildcards(dep_directory + "/{sample_id}.json").sample_id
 
     emsd_config = config["experiment"]["excess_msd"]
