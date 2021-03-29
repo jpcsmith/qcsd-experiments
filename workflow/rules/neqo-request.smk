@@ -30,8 +30,8 @@ rule excess_msd_collect:
 
 
 def excess_msd_collect_all__inputs(wildcards):
-    dep_directory = checkpoints.url_dependencies__csv.get(**wildcards).output[0]
-    sample_ids = glob_wildcards(dep_directory + "/{sample_id}.csv").sample_id
+    dep_directory = checkpoints.url_dependency_graph.get(**wildcards).output[0]
+    sample_ids = glob_wildcards(dep_directory + "/{sample_id}.json").sample_id
 
     emsd_config = config["experiment"]["excess_msd"]
     repetitions = [f"{rep:02d}" for rep in range(emsd_config["repetitions"])]
