@@ -79,6 +79,7 @@ checkpoint collect_front_baseline:
     output:
         stdout="results/collect/front_baseline/{sample_id}_{rep_id}/stdout.txt",
         pcap="results/collect/front_baseline/{sample_id}_{rep_id}/trace.pcapng",
+        success="results/collect/front_baseline/{sample_id}_{rep_id}/success_collect"
     log:
         "results/collect/front_baseline/{sample_id}_{rep_id}/stderr.txt"
     resources:
@@ -87,6 +88,10 @@ checkpoint collect_front_baseline:
         CSDEF_NO_SHAPING=1 RUST_LOG=neqo_transport=info,debug \
         python3 -m pyqcd.collect.neqo_capture_client --pcap-file {output.pcap} \
                 -- --url-dependencies-from {input} > {output.stdout} 2> {log}
+
+        if tshark -r {output.pcap} -Y 'quic.frame_type in {{0x1c..0x1d}}' -Tfields -e 'quic.cc.reason_phrase' | grep -q -E 'kthxbye' ; then
+            touch {output.success};
+        fi
         """
 
 checkpoint collect_tamaraw_defended:
