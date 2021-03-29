@@ -61,8 +61,8 @@ rule url_dependencies:
     shell: "cat {input} | gzip --to-stdout > {output}"
 
 
-checkpoint url_dependencies__csv:
-    """Extract the dependency CSVs from the browser results."""
+checkpoint url_dependency_graphs:
+    """Extract the dependency graph from the browser results."""
     input:
         rules.url_dependencies.output
     output:

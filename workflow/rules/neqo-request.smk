@@ -8,7 +8,7 @@ wildcard_constraints:
 rule excess_msd_collect:
     """Collect a sample of chaff-only mode for constant rate schedule and excess MSD."""
     input:
-        url_dep="results/determine-url-deps/dependencies/{sample_id}.csv",
+        url_dep="results/determine-url-deps/dependencies/{sample_id}.json",
         schedule="results/excess_msd/constant_{rate}Mbps_{duration}s_{interval}ms.csv".format(
             **config["experiment"]["excess_msd"]["padding"]),
     output:
