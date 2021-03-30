@@ -59,7 +59,7 @@ def run_neqo(neqo_args, keylog_file: str, ignore_errors: bool) -> NeqoResult:
         env = os.environ.copy()
         env["SSLKEYLOGFILE"] = keylog_file
 
-        args = " ".join(neqo_args)
+        args = " ".join([(f"'{x}'" if " " in x else x) for x in neqo_args])
         try:
             subprocess.run(
                 f"set -o pipefail; neqo-client {args} | tee {output_file.name}",
