@@ -74,7 +74,7 @@ def main(inputs, output_plot, output_json):
     pearsons_TX = {}
     pearsons_RX = {}
     for path in inputs:
-        (sample_id, rep_id) = path.split(sep='/')[3].split(sep='_')
+        (sample_id, rep_id) = path.split(sep='/')[10].split(sep='_')
         with open(path, "r") as json_file:
             data = json.load(json_file)
             (r_tx, _) = data['TX']['stats']

@@ -14,3 +14,10 @@ collect_reps: 20
 
 # Location of the neqo directory
 neqo: "/Users/luca/Documents/ETHZ/Thesis/code/neqo-qcd/"
+
+# Root directory containing "results" folder
+rootdir: "/Volumes/Isis/Thesis/qcd-experiments"
+# current seed working on for aggregated data
+seeddir: "ba0bab"
+# current config working on for aggregated data
+configdir: "config4"

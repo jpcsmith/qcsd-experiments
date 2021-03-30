@@ -50,15 +50,19 @@ checkpoint collect_front_defended:
     """Collect defended QUIC traces shaped with the FRONT defence."""
     input:
         url_dep="results/determine-url-deps/dependencies/{sample_id}.csv",
-        schedule="results/collect/front_defended/{sample_id}_{rep_id}/chaff_schedule.csv"
+        schedule="{rootdir}/results/collect/front_defended/{configdir}/{seeddir}/{sample_id}_{rep_id}/chaff_schedule.csv"
     output:
-        stdout="results/collect/front_defended/{sample_id}_{rep_id}/stdout.txt",
-        dummy_ids="results/collect/front_defended/{sample_id}_{rep_id}/dummy_streams.txt",
-        sampled_schedule="results/collect/front_defended/{sample_id}_{rep_id}/schedule.csv",
-        pcap="results/collect/front_defended/{sample_id}_{rep_id}/trace.pcapng",
-        success = "results/collect/front_defended/{sample_id}_{rep_id}/success_collect",
+        stdout="{rootdir}/results/collect/front_defended/{configdir}/{seeddir}/{sample_id}_{rep_id}/stdout.txt",
+        dummy_ids="{rootdir}/results/collect/front_defended/{configdir}/{seeddir}/{sample_id}_{rep_id}/dummy_streams.txt",
+        sampled_schedule="{rootdir}/results/collect/front_defended/{configdir}/{seeddir}/{sample_id}_{rep_id}/schedule.csv",
+        pcap="{rootdir}/results/collect/front_defended/{configdir}/{seeddir}/{sample_id}_{rep_id}/trace.pcapng",
+        success = "{rootdir}/results/collect/front_defended/{configdir}/{seeddir}/{sample_id}_{rep_id}/success_collect",
+    params:
+        rootdir=config['rootdir'],
+        configdir=config['configdir'],
+        seeddir=config['seeddir']
     log:
-        "results/collect/front_defended/{sample_id}_{rep_id}/stderr.txt"
+        "{rootdir}/results/collect/front_defended/{configdir}/{seeddir}/{sample_id}_{rep_id}/stderr.txt"
     resources:
         cap_iface=1
     shell: """\
@@ -77,11 +81,13 @@ checkpoint collect_front_baseline:
     input:
         "results/determine-url-deps/dependencies/{sample_id}.csv"
     output:
-        stdout="results/collect/front_baseline/{sample_id}_{rep_id}/stdout.txt",
-        pcap="results/collect/front_baseline/{sample_id}_{rep_id}/trace.pcapng",
-        success="results/collect/front_baseline/{sample_id}_{rep_id}/success_collect"
+        stdout="{rootdir}/results/collect/front_baseline/{sample_id}_{rep_id}/stdout.txt",
+        pcap="{rootdir}/results/collect/front_baseline/{sample_id}_{rep_id}/trace.pcapng",
+        success="{rootdir}/results/collect/front_baseline/{sample_id}_{rep_id}/success_collect",
+    params:
+        rootdir=config['rootdir']
     log:
-        "results/collect/front_baseline/{sample_id}_{rep_id}/stderr.txt"
+        "{rootdir}/results/collect/front_baseline/{sample_id}_{rep_id}/stderr.txt"
     resources:
         cap_iface=1
     shell: """\
@@ -126,7 +132,9 @@ rule front_baseline_csv:
     input:
         pcap=rules.collect_front_baseline.output["pcap"]
     output:
-        "results/collect/front_baseline/{sample_id}_{rep_id}/trace.csv"
+        "{rootdir}/results/collect/front_baseline/{sample_id}_{rep_id}/trace.csv"
+    params:
+        rootdir=config['rootdir']
     run:
         import pandas as pd
         from pyqcd.parse import parse_quic
@@ -140,7 +148,11 @@ rule front_trace_csv:
     input:
         pcap=rules.collect_front_defended.output["pcap"]
     output:
-        "results/collect/front_defended/{sample_id}_{rep_id}/front_traffic.csv"
+        "{rootdir}/results/collect/front_defended/{configdir}/{seeddir}/{sample_id}_{rep_id}/front_traffic.csv"
+    params:
+        rootdir=config['rootdir'],
+        configdir=config['configdir'],
+        seeddir=config['seeddir']
     run:
         import pandas as pd
         from pyqcd.parse import parse_quic
@@ -155,7 +167,11 @@ rule front_chaff_csv:
         dummy_ids=rules.collect_front_defended.output["dummy_ids"],
         pcap=rules.collect_front_defended.output["pcap"]
     output:
-        "results/collect/front_defended/{sample_id}_{rep_id}/front_cover_traffic.csv"
+        "{rootdir}/results/collect/front_defended/{configdir}/{seeddir}/{sample_id}_{rep_id}/front_cover_traffic.csv"
+    params:
+        rootdir=config['rootdir'],
+        configdir=config['configdir'],
+        seeddir=config['seeddir']
     run:
         import pandas as pd
         from pyqcd.parse import parse_quic
