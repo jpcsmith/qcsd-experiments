@@ -25,6 +25,7 @@ rule excess_msd_collect:
         " --ignore-errors"
         " --"
         " --target-trace {input.schedule} --msd-limit-excess {params.msd_limit_excess}"
+        " --header user-agent 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36'"
         " --pad-only-mode true --url-dependencies-from {input.url_dep}"
         " > {output.stdout} 2> {log}"
 
