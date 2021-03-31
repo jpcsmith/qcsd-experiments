@@ -70,6 +70,34 @@ rule pearson_front_full:
         -- {input.defended} {input.baseline} {input.schedule} > {output.stdout} 2> {log}
         """
 
+rule pearson_tamaraw:
+    """Measures Pearson correlation of defended trace with the shape schedule"""
+    input:
+        defended="{rootdir}/results/collect/tamaraw_defended/{configdir}/{sample_id}_{rep_id}/tamaraw_traffic.csv",
+        shape="{rootdir}/results/collect/tamaraw_defended/{configdir}/{sample_id}_{rep_id}/shape_schedule.csv",
+    output:
+        plot="{rootdir}/results/pearson/tamaraw/{configdir}/{sample_id}_{rep_id}/rolling_pearson.png",
+        json="{rootdir}/results/pearson/tamaraw/{configdir}/{sample_id}_{rep_id}/res.json",
+        stdout="{rootdir}/results/pearson/tamaraw/{configdir}/{sample_id}_{rep_id}/stdout.txt"
+    params:
+        window=125, # int
+        rate=50.0, # float
+        rootdir=config['rootdir'],
+        configdir=config['configdir'],
+        seeddir=config['seeddir']
+    log:
+        "{rootdir}/results/pearson/tamaraw/{configdir}/{sample_id}_{rep_id}/stderr.txt"
+    shell: """\
+        python3 -m pyqcd.pearson.measure_pearson_full --output-plot {output.plot} --output-json {output.json} \
+        --window-size {params.window} --sample-rate {params.rate} \
+        -- {input.defended} {input.shape} > {output.stdout} 2> {log}
+        """
+    # run:
+    #     from pyqcd.pearson.measure_pearson_full import main as pearson
+    #     inputs = [input.defended, input.shape]
+    #     print("porcamadonna")
+    #     pearson(inputs, output.plot, output.json, params.window, params.rate)
+
 def pearson_aggregated_input(wildcards):
     collect_dir = rules.pearson_front_dummy.output[1] # points to the json
     collect_dir = collect_dir.replace("{sample_id}", "{{sample_id}}")

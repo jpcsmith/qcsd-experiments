@@ -4,15 +4,13 @@
 Measures the distance between an undefended trace and
 the target trace.A target trace is composed of the baseline
 plus the scheduled chaff traffic.
-Traces are sampled into 1ms intervals.
 
 Inputs:
     Defended Trace
-    Dummy Schedule
-    Dummy ids list
+    Target Schedule
 
 Options:
-    --output-file filename
+    --output-plot filename
         Save the dummy packets trace and rolling window pearson graph
         to filename.
     --output-json filename
@@ -20,6 +18,8 @@ Options:
     --window-size int
         Size of the rolling window used to calculate Pearson's correlation
         in the traces.
+    --sample-rate float
+        rate of sampling packets in ms
 """
 
 import pandas as pd
@@ -27,8 +27,12 @@ import numpy as np
 from matplotlib import pyplot as plt
 import scipy.stats as stats
 import doceasy
+import json
 
-def load_schedule(filename):
+LAG_MAX_MS = 250
+
+
+def load_schedule(filename, rate):
     print("Reading schedule: {}".format(filename))
     data = pd.read_csv(filename, header=None, names=["time", "length"])
     data["is_outgoing"] = data["length"] > 0
@@ -37,13 +41,16 @@ def load_schedule(filename):
 
     data["time"] = pd.to_datetime(data["time"], unit="s")
 
+    # sampling rate
+    sampling = str(rate)+"ms"
     data = data.groupby("is_outgoing").resample(
-                                        "0.01ms", on="time", origin="epoch"
+                                        sampling, on="time", origin="epoch"
                                         )["length"].sum()
 
     return data.xs(True), data.xs(False)
 
-def load_trace(filename):
+
+def load_trace(filename, rate):
     print("Reading trace: {}".format(filename))
     data = pd.read_csv(filename)
     assert data.loc[0, "packet_number"] == 0
@@ -53,8 +60,11 @@ def load_trace(filename):
     data = data[["time", "length", "is_outgoing"]]
     data["time"] = pd.to_datetime(data["time"], unit="ms")
 
-    data = data.groupby("is_outgoing").resample("0.01ms", on="time", origin="epoch").sum().drop(columns="is_outgoing")
-    # data["time"] = (data["time"]- dt.datetime(1970,1,1)).dt.total_seconds()
+    sampling = str(rate)+"ms"
+    data = data.groupby("is_outgoing").resample(
+                                        sampling, on="time", origin="epoch"
+                                        ).sum().drop(columns="is_outgoing")
+
     return data.xs(True)["length"], data.xs(False)["length"]
 
 
@@ -82,69 +92,55 @@ def rolling_pearson(df_tx, df_rx):
     return rolling_tx, rolling_rx
 
 
-def main(inputs, output_plot, output_json):
+def lagged_crosscorr(s1, s2, lag=0):
+    r, p = stats.pearsonr(s1.shift(lag).fillna(0), s2)
+    return r
+
+
+def main(inputs, output_plot, output_json, window_size=25, sample_rate=5):
     """Loads two traces, build target and measure pearson
     """
 
     # Load traces
-    (outgoing, incoming) = load_trace(inputs[0])
+    (outgoing, incoming) = load_trace(inputs[0], float(sample_rate))
     print(outgoing, incoming)
     print("***\n")
-    (baseline_out, baseline_in) = load_trace(inputs[1])
-    print(baseline_out, baseline_in)
-    print("***\n")
-    (schedule_out, schedule_in) = load_schedule(inputs[2])
+    (schedule_out, schedule_in) = load_schedule(inputs[1], float(sample_rate))
     print(schedule_out, schedule_in)
 
-    # Create target trace: baseline + chaff
-    print("***\n")
-    print("Target trace:")
-    target_out = make_target_trace(baseline_out, schedule_out)
-    target_in = make_target_trace(baseline_in, schedule_in)
-    print(target_out, target_in)
-
-    # TODO resample here
-    outgoing = outgoing.resample("5ms", origin="epoch").sum()
-    incoming = incoming.resample("5ms", origin="epoch").sum()
-    target_out = target_out.resample("5ms", origin="epoch").sum()
-    target_in = target_in.resample("5ms", origin="epoch").sum()
-
-    print("###")
-    last = outgoing.index[-1]
-    print(last)
-    target_out = target_out[target_out.index <= last]
-    last = incoming.index[-1]
-    print(last)
-    target_in = target_in[target_in.index <= last]
-    print("###")
-
-    print("\nresampled traces: ")
-    print(outgoing, "\n", incoming)
-    print(target_out, "\n", target_in)
+    r_window_size = int(window_size)
 
     # concat traces
-    df_tx = pd.concat([outgoing, target_out], keys=["Defended", "Target"], axis=1).fillna(0)
-    df_rx = pd.concat([-incoming, -target_in], keys=["Defended", "Target"], axis=1).fillna(0)
+    df_tx = pd.concat([outgoing, schedule_out], keys=["Defended", "Target"], axis=1).fillna(0)
+    df_rx = pd.concat([-incoming, -schedule_in], keys=["Defended", "Target"], axis=1).fillna(0)
     bins_rx = df_rx.index.values.astype(float)
     bins_tx = df_tx.index.values.astype(float)
 
     # measure pearson
-    (rolling_tx, rolling_rx) = rolling_pearson(df_tx, df_rx)
+    # using the lagged pearson correlation
+    max_lag = int(LAG_MAX_MS / float(sample_rate))
+    rs = [lagged_crosscorr(df_rx['Defended'],
+                           df_rx["Target"],
+                           lag) for lag in range(0, max_lag+1)]
+    offset = np.argmax(rs)-np.ceil(len(rs)/2)
+    print("Offset RX: {}".format(offset))
+    df_rx["Defended"] = df_rx["Defended"].shift(int(offset)).fillna(0)
 
-    # plot values
+    rolling_rx = df_rx['Defended'].rolling(window=r_window_size, center=True).corr(df_rx['Target'])
+    rolling_tx = df_tx['Defended'].rolling(window=r_window_size, center=True).corr(df_tx['Target'])
+
     f, ax = plt.subplots(3, 1, sharex=True, figsize=(14, 6))
     ax[0].scatter(x=df_rx.index, y=df_rx["Defended"], label="Defended", s=1.0, marker='1')
     ax[0].scatter(x=df_rx.index, y=df_rx["Target"], label="Target", s=1.0, marker='2')
     ax[0].scatter(x=df_tx.index, y=df_tx["Defended"], label="Defended", s=1.0, marker='1')
     ax[0].scatter(x=df_tx.index, y=df_tx["Target"], label="Target", s=1.0, marker='2')
-    ax[0].set(ylabel='packet size')
+    ax[0].set(xlabel='ms', ylabel='packet size')
     ax[0].legend()
     rolling_tx.plot(x=bins_tx, ax=ax[1])
     ax[1].set(xlabel='ms', ylabel='Pearson r TX')
     rolling_rx.plot(x=bins_rx, ax=ax[2])
     ax[2].set(xlabel='ms', ylabel='Pearson r RX')
     f.savefig(output_plot, dpi=300, bbox_inches="tight")
-    # f.show()
 
     r_tx, p_tx = stats.pearsonr(df_tx["Defended"], df_tx["Target"])
     print(f"Scipy computed Pearson r TX: {r_tx} and p-value: {p_tx}")
@@ -167,10 +163,11 @@ def main(inputs, output_plot, output_json):
         json.dump(data, f)
 
 
-
 if __name__ == "__main__":
     main(**doceasy.doceasy(__doc__, doceasy.Schema({
         "INPUTS": [str],
         "--output-plot": doceasy.Or(None, str),
         "--output-json": str,
+        "--window-size": doceasy.Or(None, str),
+        "--sample-rate": doceasy.Or(None, str)
     }, ignore_extra_keys=True)))

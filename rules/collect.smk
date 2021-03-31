@@ -104,15 +104,15 @@ checkpoint collect_tamaraw_defended:
     """Collect defended QUIC traces shaped with the Tamaraw defence."""
     input:
         url_dep="results/determine-url-deps/dependencies/{sample_id}.csv",
-        schedule="results/collect/tamaraw_defended/{sample_id}_{rep_id}/shape_schedule.csv"
+        schedule="{rootdir}/results/collect/tamaraw_defended/{sample_id}_{rep_id}/shape_schedule.csv"
     output:
-        stdout="results/collect/tamaraw_defended/{sample_id}_{rep_id}/stdout.txt",
-        dummy_ids="results/collect/tamaraw_defended/{sample_id}_{rep_id}/dummy_streams.txt",
-        sampled_schedule="results/collect/tamaraw_defended/{sample_id}_{rep_id}/schedule.csv",
-        pcap="results/collect/tamaraw_defended/{sample_id}_{rep_id}/trace.pcapng",
-        success = "results/collect/tamaraw_defended/{sample_id}_{rep_id}/success_collect",
+        stdout="{rootdir}/results/collect/tamaraw_defended/{configdir}/{sample_id}_{rep_id}/stdout.txt",
+        dummy_ids="{rootdir}/results/collect/tamaraw_defended/{configdir}/{sample_id}_{rep_id}/dummy_streams.txt",
+        sampled_schedule="{rootdir}/results/collect/tamaraw_defended/{configdir}/{sample_id}_{rep_id}/schedule.csv",
+        pcap="{rootdir}/results/collect/tamaraw_defended/{configdir}/{sample_id}_{rep_id}/trace.pcapng",
+        success = "{rootdir}/results/collect/tamaraw_defended/{configdir}/{sample_id}_{rep_id}/success_collect",
     log:
-        "results/collect/tamaraw_defended/{sample_id}_{rep_id}/stderr.txt"
+        "{rootdir}/results/collect/tamaraw_defended/{configdir}/{sample_id}_{rep_id}/stderr.txt"
     resources:
         cap_iface=1
     shell: """\
@@ -185,9 +185,9 @@ rule tamaraw_target_csv:
     input:
         baseline=rules.front_baseline_csv.output[0],
     output:
-        "results/collect/tamaraw_defended/{sample_id}_{rep_id}/shape_schedule.csv"
+        "{rootdir}/results/collect/tamaraw_defended/{configdir}/{sample_id}_{rep_id}/shape_schedule.csv"
     log:
-        "results/collect/tamaraw_defended/{sample_id}_{rep_id}/shape_schedule.txt"
+        "{rootdir}/results/collect/tamaraw_defended/{configdir}/{sample_id}_{rep_id}/shape_schedule.txt"
     run:
         import pandas as pd
         from pyqcd.tamaraw import tamaraw as tw
@@ -195,6 +195,20 @@ rule tamaraw_target_csv:
         pd.DataFrame(
             tw.create_target(str(input.baseline))
         ).to_csv(str(output), index=False, header=False)
+
+rule tamaraw_trace_csv:
+    """Parses all packets in defended trace to csv"""
+    input:
+        pcap=rules.collect_tamaraw_defended.output["pcap"]
+    output:
+        "{rootdir}/results/collect/tamaraw_defended/{configdir}/{sample_id}_{rep_id}/tamaraw_traffic.csv"
+    run:
+        import pandas as pd
+        from pyqcd.parse import parse_quic
+
+        pd.DataFrame(
+            parse_quic.parse_all_traffic(str(input.pcap))
+        ).to_csv(str(output), header=True, index=False)
 
 def collect_front_defended__all_input(wildcards):
     input_dir = checkpoints.url_dependencies__csv.get(**wildcards).output[0]
