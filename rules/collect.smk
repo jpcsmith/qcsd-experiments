@@ -3,7 +3,7 @@ workflow.global_resources.setdefault("cap_iface",  1)
 
 # select the CSDEF config
 # csdef_config ="../neqo-qcd/neqo-csdef/src/config.toml"
-csdef_config ="front-config/config2.toml"
+csdef_config ="tamaraw-config/config3.toml"
 
 #: Specify constraints on the wildcards
 wildcard_constraints:
@@ -190,10 +190,19 @@ rule tamaraw_target_csv:
         "{rootdir}/results/collect/tamaraw_defended/{configdir}/{sample_id}_{rep_id}/shape_schedule.txt"
     run:
         import pandas as pd
+        import toml
         from pyqcd.tamaraw import tamaraw as tw
-
+        with open(csdef_config, "r") as f:
+            tamaraw_config = toml.loads(f.read())['tamaraw_defence']
+        with open(str(log), "w") as flog:
+            flog.write(toml.dumps(tamaraw_config))
         pd.DataFrame(
-            tw.create_target(str(input.baseline))
+            tw.create_target( fname=str(input.baseline),
+                              rho_in=float(tamaraw_config['rate_in']),
+                              rho_out=float(tamaraw_config['rate_out']),
+                              padL=int(tamaraw_config['padL']),
+                              packetsz=int(tamaraw_config['packet_size'])
+                            )
         ).to_csv(str(output), index=False, header=False)
 
 rule tamaraw_trace_csv:

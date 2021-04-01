@@ -21,6 +21,8 @@ logger = logging.getLogger('tamaraw')
 '''params'''
 DATASIZE = 750
 PadL = 100
+rate_in = 0.006
+rate_out = 0.02
 
 # Logging format
 LOG_FORMAT = "%(asctime)s %(name)-12s %(levelname)-8s %(message)s"
@@ -49,9 +51,9 @@ def AnoaTime(parameters):
     method = parameters[1]
     if (method == 0):
         if direction == 0:
-            return 0.02
+            return rate_out
         if direction == 1:
-            return 0.006
+            return rate_in
 
 
 def AnoaPad(list1, list2, padL, method):
@@ -195,8 +197,15 @@ def load_trace(filename):
     return data
 
 
-def create_target(fname):
+def create_target(fname, rho_in=0.006, rho_out=0.02, padL=100, packetsz=750):
     logger.info('Simulating %s...' % fname)
+    logger.info(f'Configs: rho_in={rho_in} rho_out={rho_out} padL={padL} packet size={packetsz}')
+    global PadL, DATASIZE, rate_in, rate_out
+    PadL = padL
+    DATASIZE = packetsz
+    rate_in = rho_in
+    rate_out = rho_out
+
     baseline = load_trace(fname)
     baseline = baseline.values
     print("baseline len: ", len(baseline))
