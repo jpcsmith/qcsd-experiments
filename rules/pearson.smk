@@ -81,7 +81,7 @@ rule pearson_tamaraw:
         stdout="{rootdir}/results/pearson/tamaraw/{configdir}/{sample_id}_{rep_id}/stdout.txt"
     params:
         window=125, # int
-        rate=50.0, # float
+        rate=5.0, # float
         rootdir=config['rootdir'],
         configdir=config['configdir'],
         seeddir=config['seeddir']
@@ -176,7 +176,7 @@ rule pearson_front_dummy_aggregated:
 
 rule pearson_tamaraw_aggregated:
     """Aggregates results from pearson_front_full into one statistic"""
-    input: pearson_aggregated_input
+    input: pearson_tamaraw_aggregated_input
     params:
         rootdir=config['rootdir'],
         configdir=config['configdir'],
