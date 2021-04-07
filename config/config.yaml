@@ -20,4 +20,4 @@ rootdir: "/Volumes/Isis/Thesis/qcd-experiments"
 # current seed working on for aggregated data
 seeddir: "decafbad"
 # current config working on for aggregated data
-configdir: "config1"
+configdir: "config1-tests"

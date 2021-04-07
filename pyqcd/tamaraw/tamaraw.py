@@ -70,7 +70,6 @@ def AnoaPad(list1, list2, padL, method):
     logger.debug("last timestamp: %f" % list1[-1][0])
     logger.debug("Number of TX packets (w/o pad): %d" % lengths[0])
     logger.debug("Number of RX packets (w/o pad): %d" % lengths[1])
-    
 
     paddings = []
 
@@ -164,16 +163,14 @@ def parse_arguments():
                         help='path to the log file. It will print to stdout by default.')
 
     args = parser.parse_args()
-    config_logger(args)
+    # config_logger(args)
 
     return args
 
 
-def config_logger(args):
+def config_logger():
     # Set file
     log_file = sys.stdout
-    if args.log != 'stdout':
-        log_file = open(args.log, 'w')
     ch = logging.StreamHandler(log_file)
 
     # Set logging format
@@ -198,6 +195,7 @@ def load_trace(filename):
 
 
 def create_target(fname, rho_in=0.006, rho_out=0.02, padL=100, packetsz=750):
+    config_logger()
     logger.info('Simulating %s...' % fname)
     logger.info(f'Configs: rho_in={rho_in} rho_out={rho_out} padL={padL} packet size={packetsz}')
     global PadL, DATASIZE, rate_in, rate_out
@@ -234,7 +232,6 @@ def create_target(fname, rho_in=0.006, rho_out=0.02, padL=100, packetsz=750):
     old_rx = sum([abs(p[1]) if p[1]<0 else 0 for p in baseline])
     old_tx = sum([p[1] if p[1]>=0 else 0 for p in baseline])    
     logger.info("rx size:%d,mtx size:%d" % (old_rx, old_tx))
-
 
     return list3
 
