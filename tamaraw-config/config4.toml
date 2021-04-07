@@ -1,0 +1,11 @@
+[flow_shaper]
+control_interval = 5
+initial_md = 3000
+rx_stream_data_window = 1048576
+local_md = 4611686018427387903
+
+[tamaraw_defence]
+packet_size = 750
+rate_in = 0.024
+rate_out = 0.08
+padL = 100
