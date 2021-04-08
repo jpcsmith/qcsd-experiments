@@ -93,8 +93,8 @@ class _DependencyGraph:
         """Find the most recent node associated with a get request."""
         nodes = [node for (node, data) in self.graph.nodes(data=True)
                  if data['url'] == url and data["done"]]
-
-        assert len(nodes) >= 1
+        if not nodes:
+            return None
         # Return the last node that was added
         return nodes[-1]
 
@@ -131,7 +131,11 @@ class _DependencyGraph:
             origin=origin(request["url"]))
 
         if msg["params"]["documentURL"] != request["url"]:
-            assert self._add_dependency(msg["params"]["documentURL"], node_id)
+            if not self._add_dependency(msg["params"]["documentURL"], node_id):
+                _LOGGER.warning(
+                    "Unable to find documentURL dependency of %r: %r",
+                    request["url"], msg["params"]["documentURL"]
+                )
 
         if initiator_url := msg["params"]["initiator"].get("url", None):
             assert self._add_dependency(initiator_url, node_id)
