@@ -34,9 +34,10 @@ def plot(base_dir: str, values: List[int], output_path: str):
 
     fig, axes = plt.subplots()
 
-    sns.scatterplot(data=data, x="excess_msd", y="success_rate", ax=axes)
+    sns.barplot(data=data, x="excess_msd", y="success_rate", ax=axes,
+                palette="ch:.25")
 
-    axes.set_ylim(-0.05, 1.05)
+    axes.set_ylim(0, 1.05)
     axes.set_ylabel("Successful fraction of samples")
     axes.set_xlabel("Excess MSD (bytes)")
     fig.savefig(output_path, bbox_inches="tight")
