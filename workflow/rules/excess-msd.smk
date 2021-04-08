@@ -47,5 +47,21 @@ def excess_msd_collect_all__inputs(wildcards):
 
 
 rule excess_msd_collect_all:
+    """Collect multiple samples for the excess_msd experiment according to the
+    configuration."""
     input:
         excess_msd_collect_all__inputs
+
+
+rule excess_msd_plot:
+    """Plot the result of the excess_msd experiment."""
+    input:
+        excess_msd_collect_all__inputs
+    output:
+        report("results/plots/excess-msd-success-rate.png",
+               category="Excess MSD Experiment"),
+    params:
+        base_dir="results/excess_msd",
+        values=config["experiment"]["excess_msd"]["excess_values"]
+    script:
+        "../scripts/plot_excess_msd.py"
