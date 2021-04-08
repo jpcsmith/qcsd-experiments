@@ -1,3 +1,5 @@
+import random
+
 #: Specify constraints on the wildcards
 wildcard_constraints:
     sample_id="\d{3}",
@@ -36,8 +38,12 @@ def excess_msd_collect_all__inputs(wildcards):
 
     emsd_config = config["experiment"]["excess_msd"]
     repetitions = [f"{rep:02d}" for rep in range(emsd_config["repetitions"])]
-    return expand(rules.excess_msd_collect.output["pcap"], sample_id=sample_ids,
-                  rep_id=repetitions, excess_msd=emsd_config["excess_values"])
+    inputs = expand(rules.excess_msd_collect.output["pcap"], sample_id=sample_ids,
+                    rep_id=repetitions, excess_msd=emsd_config["excess_values"])
+
+    # Shuffle the order so that like experiments are less likely to run sequentially
+    random.Random(278912).shuffle(inputs)
+    return inputs
 
 
 rule excess_msd_collect_all:
