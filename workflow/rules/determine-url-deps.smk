@@ -22,6 +22,7 @@ rule depfetch_urls:
     params:
         max_urls=config["max_fetch_urls"]
     shell:
+        "set +o pipefail; "
         "cut -d, -f2 {input} | sed '1d' | head -n {params.max_urls}"
         " | sed 's/^/https:\/\//' > {output}"
 
