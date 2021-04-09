@@ -39,11 +39,17 @@ def origin(url: str) -> str:
     return f"{parts[0]}://{parts[1]}"
 
 
+class EmptyGraphError(RuntimeError):
+    """Raised when construnction would result in an empty graph."""
+
+
 class _DependencyGraph:
     def __init__(self, browser_log, origin_: Optional[str] = None):
         self.logs = browser_log
         self.origin = origin_
         self.graph = nx.DiGraph()
+        #: A mapping of URLs to node_ids to account for redirections
+        self._url_node_ids: Dict[str, List[str]] = dict()
         self._ignored_requests: Set[str] = set()
 
         self._construct()
@@ -64,11 +70,15 @@ class _DependencyGraph:
         assert len(list(nx.simple_cycles(self.graph))) == 0
         assert len(list(nx.nodes_with_selfloops(self.graph))) == 0
 
-        if origin is not None:
+        if self.origin is not None:
             to_drop = [node for node, node_origin in self.graph.nodes("origin")
                        if node_origin != self.origin]
             self.graph.remove_nodes_from(to_drop)
-            assert len(self.graph) > 0
+
+            if len(self.graph) == 0:
+                raise EmptyGraphError(
+                    f"Origin filtering would result in an empty graph:"
+                    f" {self.origin}")
 
         self.graph = nx.relabel_nodes(self.graph, mapping={
             node: i for (i, node) in enumerate(self.graph)
@@ -82,6 +92,15 @@ class _DependencyGraph:
         """Return the roots of the graph."""
         return [node for node, degree in self.graph.in_degree() if degree == 0]
 
+    def _add_node(self, node_id, url, type_):
+        if url not in self._url_node_ids:
+            self._url_node_ids[url] = [node_id, ]
+        elif node_id not in self._url_node_ids[url]:
+            self._url_node_ids[url].append(node_id)
+        # If this is a redirection it will change the details of the node
+        self.graph.add_node(
+            node_id, url=url, done=False, type=type_, origin=origin(url))
+
     def _handle_response(self, msg):
         assert msg["method"] == "Network.responseReceived"
         node_id = msg["params"]["requestId"]
@@ -91,12 +110,21 @@ class _DependencyGraph:
 
     def _find_node_by_url(self, url: str) -> Optional[str]:
         """Find the most recent node associated with a get request."""
-        nodes = [node for (node, data) in self.graph.nodes(data=True)
-                 if data['url'] == url and data["done"]]
-        if not nodes:
+        # TODO: Check these nodes for which is completed
+        if not (node_ids := self._url_node_ids.get(url, [])):
             return None
-        # Return the last node that was added
-        return nodes[-1]
+        if nid := next(
+            (nid for nid in node_ids if self.graph.nodes[nid]["done"]), None
+        ):
+            return nid
+        return node_ids[-1]
+
+        # nodes = [node for (node, data) in self.graph.nodes(data=True)
+        #          if data['url'] == url and data["done"]]
+        # if not nodes:
+        #     return None
+        # # Return the last node that was added
+        # return nodes[-1]
 
     def _add_origin_dependency(self, dep: str, node_id):
         """Add a dependency for node_id to the root with the same
@@ -122,27 +150,31 @@ class _DependencyGraph:
         request = msg["params"]["request"]
         node_id = msg["params"]["requestId"]
 
-        if request["method"] != "GET" or not request["url"].startswith("http"):
+        if (request["method"] != "GET"
+                or not request["url"].startswith("https://")):
             self._ignored_requests.add(node_id)
             return
 
-        self.graph.add_node(
-            node_id, url=request["url"], done=False, type=msg["params"]["type"],
-            origin=origin(request["url"]))
+        self._add_node(node_id, request["url"], msg["params"]["type"])
 
         if msg["params"]["documentURL"] != request["url"]:
             if not self._add_dependency(msg["params"]["documentURL"], node_id):
-                _LOGGER.warning(
+                _LOGGER.debug(
                     "Unable to find documentURL dependency of %r: %r",
-                    request["url"], msg["params"]["documentURL"]
-                )
+                    request["url"], msg["params"]["documentURL"])
 
         if initiator_url := msg["params"]["initiator"].get("url", None):
-            assert self._add_dependency(initiator_url, node_id)
+            if not self._add_dependency(initiator_url, node_id):
+                _LOGGER.debug(
+                    "Unable to find initiator dependency of %r: %r",
+                    request["url"], initiator_url)
 
         if stack := msg["params"]["initiator"].get("stack", None):
             for stack_frame in stack["callFrames"]:
-                assert self._add_dependency(stack_frame["url"], node_id)
+                if not self._add_dependency(stack_frame["url"], node_id):
+                    _LOGGER.debug(
+                        "Unable to find documentURL dependency of %r: %r",
+                        request["url"], stack_frame["url"])
 
 
 def extract_graphs(fetch_output_generator) -> Iterator[nx.DiGraph]:
@@ -154,6 +186,7 @@ def extract_graphs(fetch_output_generator) -> Iterator[nx.DiGraph]:
         "duplicate": Counter(),
         "disconnected": Counter(),
         "insufficient": Counter(),
+        "empty": Counter()
     }
 
     for result in fetch_output_generator:
@@ -164,14 +197,19 @@ def extract_graphs(fetch_output_generator) -> Iterator[nx.DiGraph]:
                 "Dropping %r with a status of %r.", url, result["status"])
             continue
         if not url.startswith("https"):
-            _LOGGER.warning("Dropping %r as it is not HTTPS.", url)
+            _LOGGER.debug("Dropping %r as it is not HTTPS.", url)
             continue
         if url in seen_urls:
             _LOGGER.debug("Dropping %r as it was already encountered.", url)
             dropped_urls["duplicate"][url] += 1
             continue
 
-        graph = _DependencyGraph(result, origin(url))
+        try:
+            graph = _DependencyGraph(result, origin(url))
+        except EmptyGraphError as err:
+            _LOGGER.debug("Dropping %r: %s", url, err)
+            dropped_urls["empty"][url] += 1
+            continue
 
         if len(graph.roots()) > 1:
             _LOGGER.debug("Dropping %r as it is disconnected.", url)
@@ -184,8 +222,7 @@ def extract_graphs(fetch_output_generator) -> Iterator[nx.DiGraph]:
             yield graph
             seen_urls.add(url)
 
-    for type_ in ("duplicate", "disconnected", "insufficient"):
-        counters = dropped_urls[type_]
+    for type_, counters in dropped_urls.items():
         _LOGGER.debug("Dropped %s urls: %s", type_, dict(counters))
         _LOGGER.info("Dropped %s urls: %d", type_, sum(counters.values()))
 
