@@ -6,10 +6,10 @@ alexa_list: resources/alexa-1m-2021-04-08.csv.gz
 quic_versions: ["h3-29"]
 
 # Second level domains that whose representation in the dataset are reduced
-frequent_slds: ["blogspot.com", "appspot.com", "myshopify.com"]
+frequent_slds: ["blogspot.com", "appspot.com", "myshopify.com", "withgoogle.com", "translate.goog"]
 
 # The maximum number of URLs to attempt to fetch
-max_fetch_urls: 1000
+max_fetch_urls: 10000
 
 # The log level passed to RUST_LOG for the neqo-client
 neqo_log_level: "neqo=info"
