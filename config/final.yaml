@@ -9,7 +9,7 @@ quic_versions: ["h3-29"]
 frequent_slds: ["blogspot.com", "appspot.com", "myshopify.com", "withgoogle.com", "translate.goog"]
 
 # The maximum number of URLs to attempt to fetch
-max_fetch_urls: 10000
+max_fetch_urls: 1000
 
 # The log level passed to RUST_LOG for the neqo-client
 neqo_log_level: "neqo=info"
