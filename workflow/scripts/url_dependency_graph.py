@@ -237,7 +237,7 @@ def main(infile: str, prefix: str, verbose: bool):
         results = (json.loads(line) for line in json_lines)
 
         for file_id, graph in enumerate(extract_graphs(results)):
-            Path(f"{prefix}{file_id:03d}.json").write_text(graph.to_json())
+            Path(f"{prefix}{file_id:04d}.json").write_text(graph.to_json())
     _LOGGER.info("Script complete. Extracted %d dependency graphs.", file_id+1)
 
 

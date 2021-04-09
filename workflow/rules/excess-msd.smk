@@ -2,7 +2,7 @@ import random
 
 #: Specify constraints on the wildcards
 wildcard_constraints:
-    sample_id="\d{3}",
+    sample_id="\d{4}",
     rep_id="\d{2}",
     excess_msd="\d+",
 
