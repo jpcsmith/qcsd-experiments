@@ -58,8 +58,10 @@ rule excess_msd_plot:
     input:
         excess_msd_collect_all__inputs
     output:
-        report("results/plots/excess-msd-success-rate.png",
-               category="Excess MSD Experiment"),
+        trend_path=report("results/plots/excess-msd-success-rate.png",
+                          category="Excess MSD Experiment"),
+        heatmap_path=report("results/plots/excess-msd-heatmap.png",
+                            category="Excess MSD Experiment"),
     params:
         base_dir="results/excess_msd",
         values=config["experiment"]["excess_msd"]["excess_values"]
