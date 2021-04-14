@@ -56,11 +56,15 @@ rule excess_msd_collect_all:
 rule excess_msd_plot:
     """Plot the result of the excess_msd experiment."""
     input:
-        excess_msd_collect_all__inputs
+        excess_msd_collect_all__inputs,
+        schedule="results/excess_msd/constant_{rate}Mbps_{duration}s_{interval}ms.csv".format(
+            **config["experiment"]["excess_msd"]["padding"]),
     output:
         trend_path=report("results/plots/excess-msd-success-rate.png",
                           category="Excess MSD Experiment"),
         heatmap_path=report("results/plots/excess-msd-heatmap.png",
+                            category="Excess MSD Experiment"),
+        pearson_path=report("results/plots/excess-msd-pearson.png",
                             category="Excess MSD Experiment"),
     params:
         base_dir="results/excess_msd",
