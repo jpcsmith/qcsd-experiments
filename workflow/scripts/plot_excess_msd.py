@@ -4,7 +4,7 @@ import logging
 import itertools
 from multiprocessing import pool
 from pathlib import Path
-from typing import List, Tuple, Final, Dict
+from typing import List, Tuple, Final, Dict, Iterator, Optional
 from collections import defaultdict
 
 import pandas as pd
@@ -12,6 +12,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from scipy import stats
 
+import common
 from common import pcap, timeseries
 
 #: Possible offsets of the time-series to find the best match
@@ -19,6 +20,10 @@ _OFFSETS = list(range(0, 200, 5))
 
 #: Resampling rate
 _RATE: Final = "50ms"
+
+#: The traffic schedule, shared across multiple processes
+_SCHEDULE: Optional[pd.DataFrame] = None
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -82,37 +87,32 @@ def _compute_metrics(
     }
 
 
-def _results(base_dir: str, excess_msd: int, sched_path: str):
-    schedule = timeseries.from_csv(sched_path)
+def _results(directory: Path, schedule: pd.DataFrame) -> dict:
+    stdout_file = directory.joinpath("stdout.txt")
+    success = ">> SUCCESS <<" in stdout_file.read_text()
+    try:
+        metrics = _compute_metrics(directory, schedule) if success else {}
+    except pcap.UndecryptedTraceError:
+        _LOGGER.warning("Trace is still encrypted: %s", directory)
+        metrics = {}
 
-    sample_id = 0
-    while True:
-        directory = Path(f"{base_dir}/{excess_msd}/{sample_id:04d}_00")
-        stdout_file = directory.joinpath("stdout.txt")
+    return {
+        "success": success,
+        **metrics,
+    }
 
-        if not stdout_file.is_file():
-            break
 
-        success = ">> SUCCESS <<" in stdout_file.read_text()
-        try:
-            metrics = _compute_metrics(directory, schedule) if success else {}
-        except pcap.UndecryptedTraceError:
-            _LOGGER.warning("Trace is still encrypted: %s", directory)
-            metrics = {}
-
-        yield {
-            "excess_msd": excess_msd,
-            "sample_id": sample_id,
-            "success": success,
-            **metrics,
+def _mp_results(args) -> dict:
+    directory, metadata = args
+    assert _SCHEDULE is not None
+    try:
+        return {
+            **metadata,
+            **_results(directory, _SCHEDULE)
         }
-
-        sample_id += 1
-
-
-def _mp_results(args) -> List:
-    base_dir, excess_msd, sched_path = args
-    return list(_results(base_dir, excess_msd, sched_path))
+    except Exception:
+        _LOGGER.exception("Failed with exception on sample: %s ", directory)
+        raise
 
 
 def _plot_heatmap(data):
@@ -179,6 +179,22 @@ def _plot_pearson(data: pd.DataFrame):
     return fig
 
 
+def _find_samples(
+    base_dir: str, values: List[int]
+) -> Iterator[Tuple[Path, dict]]:
+    """Yield tuples of (factors, sample directory)."""
+    for excess_msd in values:
+        for sample_id in itertools.count(0):
+            directory = Path(base_dir) / str(excess_msd) / f"{sample_id:04d}_00"
+            if not directory.exists():
+                break
+
+            yield (
+                directory,
+                {"excess_msd": excess_msd, "sample_id": sample_id},
+            )
+
+
 def plot(
     base_dir: str,
     schedule_path: str,
@@ -188,17 +204,23 @@ def plot(
     pearson_path: str,
 ):
     """Find the result files and create plots."""
-    results = itertools.chain.from_iterable(
-        pool.Pool().imap_unordered(
-            _mp_results,
-            [(base_dir, excess_msd, schedule_path) for excess_msd in values]
-        )
+    common.init_logging()
+
+    global _SCHEDULE
+    _SCHEDULE = timeseries.from_csv(schedule_path)
+
+    results = pool.Pool().imap_unordered(
+        _mp_results, _find_samples(base_dir, values)
     )
-    data = pd.DataFrame(results)
+    data = pd.DataFrame.from_records(results)
 
     _plot_pearson(data).savefig(pearson_path, bbox_inches="tight", dpi=150)
     _plot_trend(data).savefig(trend_path, bbox_inches="tight", dpi=150)
     _plot_heatmap(data).savefig(heatmap_path, bbox_inches="tight", dpi=150)
+
+    _LOGGER.info("total: %d, successful: %d, decrypted: %s",
+                 len(data), data["success"].sum(),
+                 (~data["pearson_in"].isna()).sum())
 
 
 if __name__ == "__main__":

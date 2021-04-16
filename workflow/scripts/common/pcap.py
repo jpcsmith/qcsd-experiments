@@ -159,7 +159,7 @@ def to_quic_packets(pcap_file: str, display_filter: str = "") \
         command += ["-Y", display_filter]
     result = subprocess.run(command, check=True, stdout=subprocess.PIPE)
     assert result.stdout is not None
-    print(result.args)
+    _LOGGER.debug("Subprocess call: %s", result.args)
 
     # Count the number of sequential undecrypted packets
     sequential_undecrypted = 0
