@@ -13,26 +13,12 @@ rule depfetch_browser_image:
     shell: "docker build --tag dep-fetch resources/docker/dep-fetch/"
 
 
-rule depfetch_urls:
-    "Extract the domains URLs to be fetched and prepend with https://."
-    input:
-        "results/version-scan/scan-results.filtered.csv"
-    output:
-        "results/determine-url-deps/urls.txt"
-    params:
-        max_urls=config["max_fetch_urls"]
-    shell:
-        "set +o pipefail; "
-        "cut -d, -f2 {input} | sed '1d' | head -n {params.max_urls}"
-        " | sed 's/^/https:\/\//' > {output}"
-
-
 rule depfetch_split:
     """Create the splits for the URL dependency fetches."""
     input:
-        rules.depfetch_urls.output
+        "results/version-scan/scan-results.filtered.csv"
     output:
-        scatter.depfetch("results/determine-url-deps/urls.txt.d/{scatteritem}.txt")
+        scatter.depfetch("results/version-scan/scan-results.filtered.csv.d/{scatteritem}")
     run:
         for i, name in enumerate(output):
             shell("split -n'l/%d/%d' {input} > %s" % (i+1, len(output), output[i]))
@@ -41,22 +27,22 @@ rule depfetch_split:
 rule url_dependencies__part:
     """Fetch the URL dependencies with the browser for a split of URLs."""
     input:
-        domains="results/determine-url-deps/urls.txt.d/{scatteritem}.txt",
+        domains="results/version-scan/scan-results.filtered.csv.d/{scatteritem}",
         image_done=rules.depfetch_browser_image.output
     output:
-        "results/determine-url-deps/browser-logs.json.d/{scatteritem}.json"
+        "results/determine-url-deps/browser-logs.json.d/{scatteritem}"
     log:
         "results/determine-url-deps/browser-logs.json.d/{scatteritem}.log"
     threads: 2
     shell:
-        "workflow/scripts/docker-dep-fetch --max-attempts 1 {input.domains}"
+        "workflow/scripts/docker-dep-fetch --ranks --max-attempts 1 {input.domains}"
         " > {output} 2> {log}"
 
 
 rule url_dependencies:
     """Combine the URL dependency parts into a single file."""
     input:
-        gather.depfetch("results/determine-url-deps/browser-logs.json.d/{scatteritem}.json")
+        gather.depfetch("results/determine-url-deps/browser-logs.json.d/{scatteritem}")
     output:
         protected("results/determine-url-deps/browser-logs.json.gz")
     shell: "cat {input} | gzip --to-stdout > {output}"

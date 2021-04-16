@@ -18,6 +18,9 @@ Options:
 
     --driver-path path
         Use Chromedriver binary at path [default: chromedriver].
+
+    --ranks
+        The data is a CSV of the form rank,domain
 """
 import asyncio
 import logging
@@ -33,6 +36,7 @@ LOGGER = logging.getLogger("dep-fetch")
 
 async def main(
     urlfile, outfile, delay: float, driver_path: str, max_attempts: int,
+    ranks: bool,
 ):
     """Load each URL once with TCP and record the logs from the browser.
     """
@@ -41,7 +45,8 @@ async def main(
         level=logging.INFO)
     LOGGER.info("Running dependency collection with arguments: %s", locals())
 
-    urls = [url for (url, ) in urlfile]
+    urls = (["https://" + domain for (_, domain) in urlfile] if ranks
+            else [url for (url, ) in urlfile])
     if not urls:
         raise ValueError("No URLs provided to fetch.")
 
@@ -69,5 +74,6 @@ if __name__ == '__main__':
             "--driver-path": str,
             "--delay": Use(float),
             "--max-attempts": Use(int),
+            "--ranks": bool,
         }))
     )
