@@ -71,7 +71,7 @@ def remove_similar_roots(
     """
     frame = (pd.Series(domains)
              .reset_index(drop=True).rename("netloc")
-             .str.replace(r":\d+", "")
+             .str.replace(r":\d+", "", regex=True)
              .to_frame()
              .assign(ranks=ranks)
              .sort_values(by="ranks"))
@@ -105,7 +105,7 @@ def reduce_representation(
     when selecting the sample.
     """
     frame = (pd.Series(domains).reset_index(drop=True).rename("netloc")
-             .str.replace(r":\d+", "")
+             .str.replace(r":\d+", "", regex=True)
              .to_frame()
              .assign(ranks=ranks)
              .sort_values(by="ranks"))
@@ -184,7 +184,7 @@ def main(
     _LOGGER.info("Reduced representation of %s in the dataset. Now %d domains",
                  sld_domains, len(data))
 
-    data.sort_index().to_csv(outfile, header=True, index=True)
+    data.sort_index().to_csv(outfile, header=False, index=True)
 
 
 if __name__ == "__main__":
