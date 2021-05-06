@@ -13,3 +13,7 @@ git+https://github.com/jpcsmith/wf-tools.git@v0.3.0#egg=lab
 
 # Development files
 wheel
+
+# Snakemake reports
+jinja2
+pygraphviz

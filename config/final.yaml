@@ -14,8 +14,20 @@ max_fetch_urls: 1000
 # The log level passed to RUST_LOG for the neqo-client
 neqo_log_level: "neqo=info"
 
+# The User-Agent to use for collections
+user_agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36"
+
+msd_limit_excess: 1000
+
 experiment:
   excess_msd:
     repetitions: 1
     padding: { rate: 1, duration: 10, interval: 5 }  # Mbps, seconds, milliseconds
     excess_values: [ 16, 350, 700, 1000, 2000 ]
+  front_single_eval:
+    front_config:
+      max_client_packets: 2500
+      max_server_packets: 2500
+      packet_size: 1200
+      peak_minimum: 1
+      peak_maximum: 14

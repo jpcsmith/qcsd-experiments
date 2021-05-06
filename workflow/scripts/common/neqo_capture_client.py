@@ -1,35 +1,18 @@
-#!/usr/bin/env python3
-"""Usage: module [options] -- [NEQO_ARGS]...
-
-Run neqo-client with the specified arguments provided to NEQO_ARGS,
-and capture and filter the trace to the IP and ports specified in
-the output from NEQO.
-
-The call to neqo-client inherits the process's environment.
-
-Options:
-    --pcap-file filename
-        Write the decrypted and filtered pcap data in pcapng format to
-        filename.
-    --ignore-errors
-        Do not raise an exception when neqo-client returns a non-zero
-        exit status.  Instead, append the string ">>> FAILURE <<<" to
-        neqo's standard output and ">>> SUCCESS <<<" otherwise.
-"""
+"""Wrapper to run neqo-client binary."""
 import os
 import re
 import sys
+import logging
 import contextlib
 import subprocess
+from pathlib import Path
 from subprocess import PIPE
 from tempfile import NamedTemporaryFile
 from dataclasses import dataclass
-from typing import Optional, Union, Tuple, NamedTuple
+from typing import Union, Tuple, NamedTuple
 from ipaddress import IPv4Address, IPv6Address, ip_address
 
 from lab.sniffer import TCPDumpPacketSniffer
-
-from common import doceasy
 
 
 @contextlib.contextmanager
@@ -51,30 +34,39 @@ class NeqoResult:
     is_success: bool
 
 
-def run_neqo(neqo_args, keylog_file: str, ignore_errors: bool) -> NeqoResult:
+def run_neqo(
+    neqo_args, keylog_file: str, ignore_errors: bool,
+    stdout=None, stderr=None, env=None,
+) -> NeqoResult:
     """Run NEQO and record its output and related files."""
     is_success = True
 
     with NamedTemporaryFile(mode="rt") as output_file:
-        env = os.environ.copy()
-        env["SSLKEYLOGFILE"] = keylog_file
+        process_env = os.environ.copy()
+        if env is not None:
+            process_env.update(env)
+        process_env["SSLKEYLOGFILE"] = keylog_file
 
         args = " ".join([(f"'{x}'" if " " in x else x) for x in neqo_args])
         try:
             subprocess.run(
                 f"set -o pipefail; neqo-client {args} | tee {output_file.name}",
                 # We need the shell so that we can do redirection
-                shell=True, executable='bash', env=env,
+                shell=True, executable='bash', env=process_env,
                 # Raise an exception on program error codes
                 check=True,
+                # Redirect stdout and stderr to the files if set
+                stdout=stdout, stderr=stderr
             )
             if ignore_errors:
-                print(">>> SUCCESS <<<")
+                print(">>> SUCCESS <<<",
+                      file=(sys.stdout if stdout is None else stdout))
         except subprocess.CalledProcessError as err:
             if not ignore_errors:
                 raise
-            print(err, file=sys.stderr)
-            print(">>> FAILURE <<<")
+            logging.getLogger(__name__).error(err)
+            print(">>> FAILURE <<<",
+                  file=(sys.stdout if stdout is None else stdout))
             is_success = False
 
         return NeqoResult(output=output_file.read(), is_success=is_success)
@@ -157,12 +149,21 @@ def _filter_packets(
     return result.stdout
 
 
-def main(neqo_args, pcap_file: Optional[str], ignore_errors: bool):
+def main(
+    neqo_args,
+    pcap_file: Union[str, Path, None],
+    ignore_errors: bool,
+    stdout=None,
+    stderr=None,
+    env=None,
+):
     """Run neqo-client while capturing the traffic."""
     with NamedTemporaryFile(mode="r") as keylog:
         with tcpdump(capture_filter="udp") as sniffer:
-            result = run_neqo(neqo_args, keylog_file=keylog.name,
-                              ignore_errors=ignore_errors)
+            result = run_neqo(
+                neqo_args, keylog_file=keylog.name, ignore_errors=ignore_errors,
+                stdout=stdout, stderr=stderr, env=env,
+            )
 
         if pcap_file is not None:
             pcap_bytes = _filter_packets(sniffer.pcap(), result.output,
@@ -171,11 +172,3 @@ def main(neqo_args, pcap_file: Optional[str], ignore_errors: bool):
 
             with open(pcap_file, mode="wb") as pcap:
                 pcap.write(pcap_bytes)
-
-
-if __name__ == "__main__":
-    main(**doceasy.doceasy(__doc__, doceasy.Schema({
-        "NEQO_ARGS": [str],
-        "--pcap-file": doceasy.Or(None, str),
-        "--ignore-errors": bool,
-    }, ignore_extra_keys=True)))
