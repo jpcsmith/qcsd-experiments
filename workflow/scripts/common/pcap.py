@@ -2,6 +2,7 @@
 import json
 import logging
 import subprocess
+import tempfile
 from pathlib import Path
 from dataclasses import dataclass
 from typing import List, Iterator, NamedTuple, Set
@@ -215,13 +216,35 @@ def _load_chaff_stream_ids(chaff_streams_file: str) -> Set[int]:
     return set(int(line.split(maxsplit=1)[0]) for line in lines)
 
 
-def to_quic_lengths(
+def is_pcap_decrypted(filename: str):
+    """Return true iff the PCAP at filename is a decrypted QUIC pcap.
+
+    This is signified by all of the packets containing a QUIC frame.
+    """
+    result = subprocess.run(
+        ["tshark", "-r", filename, "-Tfields", "-e", "quic.frame"],
+        check=True,
+        stdout=subprocess.PIPE
+    )
+    lines = result.stdout.decode("utf-8").splitlines()
+    n_packets_without_frame = sum(1 for line in lines if line == "")
+    return n_packets_without_frame == 0
+
+
+def remove_packet(input_name: str, output_name: str, frame_number: int):
+    """Write the PCAP at input_name to output_name with the frame
+    identified by frame_number removed.
+    """
+    subprocess.run(
+        ["editcap", "-Tlinux-sll", "-F", "pcapng", input_name, output_name,
+         str(frame_number)],
+        check=True
+    )
+
+
+def _to_quic_lengths(
     pcap_file: str, chaff_streams_file: str,
 ) -> Iterator[QuicPacketSummary]:
-    """Parse only chaff traffic from the pcap_file and file specifying
-    chaff streams.  Only the details of packets with chaff traffic are
-    returned.
-    """
     chaff_streams = _load_chaff_stream_ids(chaff_streams_file)
 
     for pkt in to_quic_packets(pcap_file):
@@ -239,3 +262,20 @@ def to_quic_lengths(
             is_outgoing=pkt.is_outgoing(),
             number=pkt.packet_number,
         )
+
+
+def to_quic_lengths(
+    pcap_file: str, chaff_streams_file: str,
+) -> Iterator[QuicPacketSummary]:
+    """Parse only chaff traffic from the pcap_file and file specifying
+    chaff streams.  Only the details of packets with chaff traffic are
+    returned.
+    """
+    if is_pcap_decrypted(pcap_file):
+        yield from _to_quic_lengths(pcap_file, chaff_streams_file)
+    else:
+        with tempfile.NamedTemporaryFile(mode='r', suffix=".pcapng") as tfile:
+            remove_packet(pcap_file, tfile.name, frame_number=2)
+            if not is_pcap_decrypted(tfile.name):
+                raise UndecryptedTraceError(f"Undecrypted trace: {tfile.name}")
+        yield from _to_quic_lengths(tfile.name, chaff_streams_file)

@@ -1,6 +1,13 @@
+import sys
+
+
 configfile: "config/config.yaml"
 
+#: Ensure that the rules can find any modules defined in workflow/scripts/
+sys.path.append("workflow/scripts/")
 
+
+include: "rules/common.smk"
 include: "rules/alexa.smk"
 include: "rules/schedules.smk"
 include: "rules/version-scan.smk"

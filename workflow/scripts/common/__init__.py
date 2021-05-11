@@ -1,7 +1,8 @@
 import logging
 import inspect
+from . import pcap
 
-__all__ = ["init_logging"]
+__all__ = ["init_logging", "pcap"]
 
 
 def init_logging(verbosity: int = 1, filename=None):
