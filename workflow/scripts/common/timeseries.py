@@ -47,7 +47,7 @@ def _from_trace(data: pd.DataFrame) -> pd.DataFrame:
     # Convert to a single column for incoming and a single for outgoing
     return (data.unstack(fill_value=0)
                 .droplevel(0, axis=1)
-                .rename(columns={True: "length_out", False: "length_in"}))
+                .rename(columns={True: "out", False: "in"}))
 
 
 def resample(timeseries: pd.DataFrame, rate: str) -> pd.DataFrame:

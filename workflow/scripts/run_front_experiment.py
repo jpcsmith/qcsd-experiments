@@ -2,13 +2,11 @@
 a control sample and a defend sample.
 """
 import logging
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 import common
-from common import neqo_capture_client
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -56,61 +54,54 @@ def sample_front_trace(
     return result.sort_values(by="time")
 
 
-def main():
+def main(input_, output, log, params, config):
     """Read configuration parameters from the parent snakemake
     process and collect a control sample followed by a sample
     using a generated front defence.
     """
     common.init_logging()
 
-    snakemake = globals().get("snakemake", None)
-    config = snakemake.config
+    rand = np.random.default_rng(params["seed"])
     exp_config = config["experiment"]["front_single_eval"]
 
-    out_dir = Path(snakemake.output["out_dir"])
-    out_dir.mkdir(exist_ok=True)
-
-    rand = np.random.default_rng(snakemake.params["seed"])
-
-    trace_filename = Path(out_dir, "front_trace.csv")
     trace = sample_front_trace(**exp_config["front_config"], rand=rand)
-    trace.to_csv(trace_filename, header=False, index=False)
+    trace.to_csv(output["schedule"], header=False, index=False)
 
     args = [
         "--header", "user-agent", config["user_agent"],
-        "--url-dependencies-from", snakemake.input["url_dep"]
+        "--url-dependencies-from", input_["url_dep"]
     ]
 
     # Run the control setting
-    with Path(out_dir, "control.stdout").open(mode="w") as stdout, \
-            Path(out_dir, "control.stderr").open(mode="w") as stderr:
-        neqo_capture_client.main(
-            args,
-            stdout=stdout,
-            stderr=stderr,
-            env={
-                "CSDEF_NO_SHAPING": "True",
-                "RUST_LOG": config["neqo_log_level"]
-            },
-            pcap_file=Path(out_dir, "control.pcapng"),
-            ignore_errors=True,
-        )
+    common.neqo_capture_client.main(
+        args,
+        stdout=output["control"],
+        stderr=log["control"],
+        pcap_file=output["control_pcap"],
+        env={"CSDEF_NO_SHAPING": "True", "RUST_LOG": config["neqo_log_level"]},
+        ignore_errors=True,
+    )
 
     # Run the front setting
-    with Path(out_dir, "front.stdout").open(mode="w") as stdout, \
-            Path(out_dir, "front.stderr").open(mode="w") as stderr:
-        neqo_capture_client.main(
-            args + [
-                "--target-trace", str(trace_filename),
-                "--pad-only-mode", "true",
-            ],
-            stdout=stdout,
-            stderr=stderr,
-            env={"RUST_LOG": config["neqo_log_level"]},
-            pcap_file=Path(out_dir, "front.pcapng"),
-            ignore_errors=True,
-        )
+    common.neqo_capture_client.main(
+        args + [
+            "--target-trace", str(output["schedule"]),
+            "--pad-only-mode", "true",
+        ],
+        stdout=output["front"],
+        stderr=log["front"],
+        pcap_file=output["front_pcap"],
+        env={"RUST_LOG": config["neqo_log_level"]},
+        ignore_errors=True,
+    )
 
 
 if __name__ == "__main__":
-    main()
+    snakemake = globals().get("snakemake", None)
+    main(
+        input_=snakemake.input,
+        output=snakemake.output,
+        log=snakemake.log,
+        params=snakemake.params,
+        config=snakemake.config
+    )

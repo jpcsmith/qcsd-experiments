@@ -41,7 +41,14 @@ def run_neqo(
     """Run NEQO and record its output and related files."""
     is_success = True
 
-    with NamedTemporaryFile(mode="rt") as output_file:
+    with contextlib.ExitStack() as stack:
+        output_file = stack.enter_context(NamedTemporaryFile(mode="rt"))
+
+        if isinstance(stdout, (str, Path)):
+            stdout = stack.enter_context(open(stdout, mode="w"))
+        if isinstance(stderr, (str, Path)):
+            stderr = stack.enter_context(open(stderr, mode="w"))
+
         process_env = os.environ.copy()
         if env is not None:
             process_env.update(env)
