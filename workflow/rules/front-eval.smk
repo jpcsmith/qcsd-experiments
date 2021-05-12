@@ -1,4 +1,4 @@
-rule front_eval_collect:
+rule front_eval__collect:
     """Collect a control and defended sample with the FRONT defence."""
     input:
         url_dep="results/determine-url-deps/dependencies/{sample_id}.json"
@@ -20,14 +20,27 @@ rule front_eval_collect:
         "../scripts/run_front_experiment.py"
 
 
-rule front_eval_score:
+def front_eval__score__inputs(wildcards):
+    dep_directory = checkpoints.url_dependency_graphs.get(**wildcards).output[0]
+    sample_ids = glob_wildcards(dep_directory + "/{sample_id}.json").sample_id
+
+    sample_ids = ["0000", "0001", "0002", "0003",]  # TODO: Remove
+    files = rules.front_eval__collect.output
+    return {
+        "control": expand(files["control"], sample_id=sample_ids, rep_id="00"),
+        "control_pcap": expand(files["control_pcap"], sample_id=sample_ids, rep_id="00"),
+        "defended": expand(files["front"], sample_id=sample_ids, rep_id="00"),
+        "defended_pcap": expand(files["front_pcap"], sample_id=sample_ids, rep_id="00"),
+        "schedule": expand(files["schedule"], sample_id=sample_ids, rep_id="00")
+    }
+
+
+rule front_eval__score:
     """Compare the schedule to the defended traces."""
     input:
-        schedule=rules.front_eval_collect.output["schedule"],
-        # Derived from the pcaps and logs by a rule in common.smk
-        defence="results/front-eval/{sample_id}_{rep_id}/front-composition.csv",
+        unpack(front_eval__score__inputs)
     output:
-        temp("results/front-eval/{sample_id}_{rep_id}/scores.csv")
+        "results/front-eval/scores.csv"
     params:
         **config["experiment"]["front_single_eval"]["scores"]
     script:

@@ -8,11 +8,43 @@ import subprocess
 from pathlib import Path
 from subprocess import PIPE
 from tempfile import NamedTemporaryFile
-from dataclasses import dataclass
 from typing import Union, Tuple, NamedTuple
 from ipaddress import IPv4Address, IPv6Address, ip_address
 
 from lab.sniffer import TCPDumpPacketSniffer
+
+
+def run(
+    neqo_args,
+    pcap_file: Union[str, Path, None],
+    ignore_errors: bool,
+    stdout=None,
+    stderr=None,
+    env=None,
+):
+    """Run neqo-client while capturing the traffic."""
+    with NamedTemporaryFile(mode="r") as keylog:
+        with tcpdump(capture_filter="udp") as sniffer:
+            (output, is_success) = _run_neqo(
+                neqo_args, keylog_file=keylog.name, ignore_errors=ignore_errors,
+                stdout=stdout, stderr=stderr, env=env,
+            )
+
+        if pcap_file is not None:
+            pcap_bytes = _filter_packets(
+                sniffer.pcap(), output, ignore_errors=(not is_success))
+            pcap_bytes = _embed_tls_keys(pcap_bytes, keylog.name)
+
+            with open(pcap_file, mode="wb") as pcap:
+                pcap.write(pcap_bytes)
+
+
+def is_run_successful(stdout_file: Union[str, Path]) -> bool:
+    """Return true if the output of neqo run indicates a success."""
+    # We check for the tag ">>> SUCCESS <<<" at the end of the file
+    with open(stdout_file, mode="rb") as file_:
+        file_.seek(-30, os.SEEK_END)
+        return b">>> SUCCESS <<<" in file_.read()
 
 
 @contextlib.contextmanager
@@ -27,20 +59,11 @@ def tcpdump(*args, **kwargs):
         sniffer.stop()
 
 
-@dataclass
-class NeqoResult:
-    """Various output files and data from a NEQO run."""
-    output: str
-    is_success: bool
-
-
-def run_neqo(
+def _run_neqo(
     neqo_args, keylog_file: str, ignore_errors: bool,
     stdout=None, stderr=None, env=None,
-) -> NeqoResult:
+):
     """Run NEQO and record its output and related files."""
-    is_success = True
-
     with contextlib.ExitStack() as stack:
         output_file = stack.enter_context(NamedTemporaryFile(mode="rt"))
 
@@ -50,10 +73,10 @@ def run_neqo(
             stderr = stack.enter_context(open(stderr, mode="w"))
 
         process_env = os.environ.copy()
-        if env is not None:
-            process_env.update(env)
+        process_env.update(env or {})
         process_env["SSLKEYLOGFILE"] = keylog_file
 
+        is_success = False
         args = " ".join([(f"'{x}'" if " " in x else x) for x in neqo_args])
         try:
             subprocess.run(
@@ -65,18 +88,17 @@ def run_neqo(
                 # Redirect stdout and stderr to the files if set
                 stdout=stdout, stderr=stderr
             )
-            if ignore_errors:
-                print(">>> SUCCESS <<<",
-                      file=(sys.stdout if stdout is None else stdout))
+            is_success = True
         except subprocess.CalledProcessError as err:
             if not ignore_errors:
                 raise
             logging.getLogger(__name__).error(err)
-            print(">>> FAILURE <<<",
-                  file=(sys.stdout if stdout is None else stdout))
             is_success = False
 
-        return NeqoResult(output=output_file.read(), is_success=is_success)
+        if ignore_errors:
+            print(">>> SUCCESS <<<" if is_success else ">>> FAILURE <<<",
+                  file=(sys.stdout if stdout is None else stdout))
+        return (output_file.read(), is_success)
 
 
 def _embed_tls_keys(pcap_bytes: bytes, keylog_file: str) -> bytes:
@@ -154,28 +176,3 @@ def _filter_packets(
     # Ensure that the result is neither none nor empty
     assert result.stdout
     return result.stdout
-
-
-def main(
-    neqo_args,
-    pcap_file: Union[str, Path, None],
-    ignore_errors: bool,
-    stdout=None,
-    stderr=None,
-    env=None,
-):
-    """Run neqo-client while capturing the traffic."""
-    with NamedTemporaryFile(mode="r") as keylog:
-        with tcpdump(capture_filter="udp") as sniffer:
-            result = run_neqo(
-                neqo_args, keylog_file=keylog.name, ignore_errors=ignore_errors,
-                stdout=stdout, stderr=stderr, env=env,
-            )
-
-        if pcap_file is not None:
-            pcap_bytes = _filter_packets(sniffer.pcap(), result.output,
-                                         ignore_errors=(not result.is_success))
-            pcap_bytes = _embed_tls_keys(pcap_bytes, keylog.name)
-
-            with open(pcap_file, mode="wb") as pcap:
-                pcap.write(pcap_bytes)

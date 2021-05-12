@@ -1,8 +1,8 @@
 import logging
 import inspect
-from . import pcap, neqo_capture_client
+from . import pcap, neqo
 
-__all__ = ["init_logging", "pcap", "neqo_capture_client"]
+__all__ = ["init_logging", "pcap", "neqo"]
 
 
 def init_logging(verbosity: int = 1, filename=None):

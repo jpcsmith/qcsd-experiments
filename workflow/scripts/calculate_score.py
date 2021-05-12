@@ -3,6 +3,7 @@
 import logging
 import itertools
 from typing import Tuple
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -12,7 +13,7 @@ import pyinform
 import fastdtw
 
 import common
-from common import timeseries
+from common import timeseries, neqo
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -52,6 +53,41 @@ def lag_timeseries(
     return (best_offset, pd.Series(series_a.values, index=final_index))
 
 
+def simulate_with_lag(control, schedule, defended, offsets, rate="5ms"):
+    defended_in = timeseries.resample(defended["in"], rate)
+    simulated_out = control["out"].append(schedule["out"])
+
+    best_offset = 0
+    best_distance = np.inf
+    best_simulated = None
+
+    for offset in offsets:
+        shifted_schedule = pd.Series(
+            schedule["in"].values,
+            index=(schedule["in"].index + pd.Timedelta(f"{offset}ms"))
+        )
+        simulated_in = control["in"].append(shifted_schedule)
+
+        # Put together in a dataframe to ensure they have the same length and
+        # indices
+        frame = pd.DataFrame({
+            "defended": defended_in,
+            "simulated": timeseries.resample(simulated_in, rate),
+        }).fillna(0)
+
+        distance = euclidean(frame["defended"], frame["simulated"])
+        if distance < best_distance:
+            best_offset = offset
+            best_distance = distance
+            best_simulated = simulated_in
+
+    assert best_simulated is not None
+    return (
+        best_offset,
+        pd.DataFrame({"in": best_simulated, "out": simulated_out}).fillna(0)
+    )
+
+
 def main(input_, output, *, ts_offset, resample_rates):
     """Score how close a padding-only defended time series is to
     padding schedule.
@@ -69,37 +105,49 @@ def main(input_, output, *, ts_offset, resample_rates):
             when calculating the scores.
     """
     common.init_logging()
-
-    chaff_ts = timeseries.from_trace(
-        pd.read_csv(input_["defence"]), length_col="length_chaff"
-    )
-    schedule_ts = timeseries.from_csv(input_["schedule"])
-
-    offsets = range(ts_offset["min"], ts_offset["max"], ts_offset["inc"])
-    (offset, chaff_ts["in"]) = lag_timeseries(
-        chaff_ts["in"], schedule_ts["in"], offsets=list(offsets)
-    )
-    _LOGGER.info("Using an incoming offset of %d ms", offset)
+    assert len(input_["control"]) == len(input_["control_pcap"]) \
+        == len(input_["defended"]) == len(input_["defended_pcap"]) \
+        == len(input_["schedule"]), "unequal file lists"
 
     results = []
-    for rate, direction in itertools.product(resample_rates, ("in", "out")):
-        series = pd.DataFrame({
-            "a": timeseries.resample(chaff_ts[direction], rate),
-            "b": timeseries.resample(schedule_ts[direction], rate),
-        }).fillna(0)
+    for i in range(len(input_["control"])):
+        directory = Path(input_["control"][i]).parent
 
-        results.extend([
-            (rate, "pearson", direction, pearsonr(series["a"], series["b"])[0]),
-            (rate, "euclidean", direction, euclidean(series["a"], series["b"])),
-            (rate, "dtw", direction, fastdtw.dtw(series["a"], series["b"])[0]),
-            (rate, "cosine", direction, cosine(series["a"], series["b"])),
-            (rate, "mutualinfo", direction,
-             pyinform.mutualinfo.mutual_info(series["a"], series["b"]))
-        ])
+        if (
+            not neqo.is_run_successful(input_["control"][i])
+            or not neqo.is_run_successful(input_["defended"][i])
+        ):
+            _LOGGER.info("Skipping unsuccessful run: %s", directory)
 
-    pd.DataFrame(
-        results, columns=["rate", "metric", "dir", "value"]
-    ).to_csv(str(output[0]), header=True, index=False)
+        schedule_ts = timeseries.from_csv(input_["schedule"][i])
+        control_ts = timeseries.from_pcap(input_["control_pcap"][i])
+        defended_ts = timeseries.from_pcap(input_["defended_pcap"][i])
+
+        offsets = range(ts_offset["min"], ts_offset["max"], ts_offset["inc"])
+        (offset, simulated_ts) = simulate_with_lag(
+            control_ts, schedule_ts, defended_ts, offsets,
+        )
+        _LOGGER.info("Using an incoming offset of %d ms", offset)
+
+        for rate, direction in itertools.product(resample_rates, ("in", "out")):
+            series = pd.DataFrame({
+                "a": timeseries.resample(defended_ts[direction], rate),
+                "b": timeseries.resample(simulated_ts[direction], rate),
+            }).fillna(0)
+
+            results.append([
+                rate,
+                direction,
+                pearsonr(series["a"], series["b"])[0],
+                euclidean(series["a"], series["b"]),
+                fastdtw.dtw(series["a"], series["b"])[0],
+                cosine(series["a"], series["b"]),
+                pyinform.mutualinfo.mutual_info(series["a"], series["b"])
+            ])
+
+    pd.DataFrame(results, columns=[
+        "rate", "dir", "pearsonr", "euclidean", "dtw", "cosine", "mutual_info"
+    ]).to_csv(output[0], header=True, index=False)
 
 
 if __name__ == "__main__":

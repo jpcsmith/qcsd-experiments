@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 
 import common
+from common import neqo
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -73,7 +74,7 @@ def main(input_, output, log, params, config):
     ]
 
     # Run the control setting
-    common.neqo_capture_client.main(
+    neqo.run(
         args,
         stdout=output["control"],
         stderr=log["control"],
@@ -83,7 +84,7 @@ def main(input_, output, log, params, config):
     )
 
     # Run the front setting
-    common.neqo_capture_client.main(
+    neqo.run(
         args + [
             "--target-trace", str(output["schedule"]),
             "--pad-only-mode", "true",

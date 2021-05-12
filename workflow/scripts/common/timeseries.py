@@ -1,6 +1,11 @@
 """Functions for constructing and binning timeseries from traces and
 csvs.
 """
+import io
+import subprocess
+from typing import Union
+from pathlib import Path
+
 import pandas as pd
 
 
@@ -35,6 +40,29 @@ def from_trace(trace: pd.DataFrame, length_col: str = "length") -> pd.DataFrame:
         data = data.rename(columns={length_col: "length"})
     data = data.assign(time=pd.to_timedelta(data["time"], unit="s"))
 
+    # Set the time relative to the earliest entry
+    data["time"] -= data["time"].min()
+
+    return _from_trace(data)
+
+
+def from_pcap(filename: Union[str, Path]) -> pd.DataFrame:
+    """Return a timeseries from a pcap file.
+
+    The lengths correspond to the IP length fields.
+    """
+    command = [
+        "tshark", "-r", str(filename),
+        "-T", "fields", "-E", "separator=,",
+        "-e", "frame.time_epoch", "-e", "udp.length", "-e", "udp.srcport"
+    ]
+    result = subprocess.run(command, check=True, stdout=subprocess.PIPE)
+    data = pd.read_csv(
+        io.BytesIO(result.stdout), names=["time", "length", "is_outgoing"]
+    )
+
+    data["is_outgoing"] = data["is_outgoing"] != 443
+    data["time"] = pd.to_timedelta(data["time"], unit="s")
     # Set the time relative to the earliest entry
     data["time"] -= data["time"].min()
 

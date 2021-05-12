@@ -274,8 +274,8 @@ def to_quic_lengths(
     if is_pcap_decrypted(pcap_file):
         yield from _to_quic_lengths(pcap_file, chaff_streams_file)
     else:
-        with tempfile.NamedTemporaryFile(mode='r', suffix=".pcapng") as tfile:
+        with tempfile.NamedTemporaryFile(mode='wb', suffix=".pcapng") as tfile:
             remove_packet(pcap_file, tfile.name, frame_number=2)
             if not is_pcap_decrypted(tfile.name):
                 raise UndecryptedTraceError(f"Undecrypted trace: {tfile.name}")
-        yield from _to_quic_lengths(tfile.name, chaff_streams_file)
+            yield from _to_quic_lengths(tfile.name, chaff_streams_file)

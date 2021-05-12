@@ -8,6 +8,9 @@ schema==0.7.2
 seaborn==0.11.1
 publicsuffixlist==0.7.7
 networkx==2.5
+fastdtw==0.3.4
+pyinform==0.2.0
+
 
 git+https://github.com/jpcsmith/wf-tools.git@v0.3.0#egg=lab
 
