@@ -20,28 +20,37 @@ rule front_eval__collect:
         "../scripts/run_front_experiment.py"
 
 
-def front_eval__score__inputs(wildcards):
-    dep_directory = checkpoints.url_dependency_graphs.get(**wildcards).output[0]
-    sample_ids = glob_wildcards(dep_directory + "/{sample_id}.json").sample_id
-
-    sample_ids = ["0000", "0001", "0002", "0003",]  # TODO: Remove
-    files = rules.front_eval__collect.output
-    return {
-        "control": expand(files["control"], sample_id=sample_ids, rep_id="00"),
-        "control_pcap": expand(files["control_pcap"], sample_id=sample_ids, rep_id="00"),
-        "defended": expand(files["front"], sample_id=sample_ids, rep_id="00"),
-        "defended_pcap": expand(files["front_pcap"], sample_id=sample_ids, rep_id="00"),
-        "schedule": expand(files["schedule"], sample_id=sample_ids, rep_id="00")
-    }
-
-
 rule front_eval__score:
     """Compare the schedule to the defended traces."""
     input:
-        unpack(front_eval__score__inputs)
+        control=rules.front_eval__collect.output["control"],
+        control_pcap=rules.front_eval__collect.output["control_pcap"],
+        defended=rules.front_eval__collect.output["front"],
+        defended_pcap=rules.front_eval__collect.output["front_pcap"],
+        schedule=rules.front_eval__collect.output["schedule"],
     output:
-        "results/front-eval/scores.csv"
+        "results/front-eval/{sample_id}_{rep_id}/scores.csv"
+    log:
+        "results/front-eval/{sample_id}_{rep_id}/scores.log"
     params:
         **config["experiment"]["front_single_eval"]["scores"]
     script:
         "../scripts/calculate_score.py"
+
+
+def front_eval__all_score__inputs(wildcards):
+    dep_directory = checkpoints.url_dependency_graphs.get(**wildcards).output[0]
+    sample_ids = glob_wildcards(dep_directory + "/{sample_id}.json").sample_id
+    return expand(rules.front_eval__score.output, sample_id=sample_ids, rep_id="00")
+
+
+rule front_eval__all_score:
+    """Compute scores for a FRONT evaluation on all of the dependency graphs"""
+    input:
+        front_eval__all_score__inputs
+    output:
+        "results/front-eval/scores.csv"
+    run:
+        pd.concat(
+            [pd.read_csv(f) for f in input], ignore_index=True
+        ).to_csv(output[0], index=False)
