@@ -54,3 +54,12 @@ rule front_eval__all_score:
         pd.concat(
             [pd.read_csv(f) for f in input], ignore_index=True
         ).to_csv(output[0], index=False)
+
+
+rule front_eval__plot:
+    input:
+        rules.front_eval__all_score.output
+    output:
+        "results/plots/front-eval-plot.pdf"
+    notebook:
+        "../notebooks/plot-front-eval.ipynb"
