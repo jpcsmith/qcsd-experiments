@@ -62,4 +62,4 @@ rule front_eval__plot:
     output:
         "results/plots/front-eval-plot.pdf"
     notebook:
-        "../notebooks/plot-front-eval.ipynb"
+        "../notebooks/plot-scores.ipynb"

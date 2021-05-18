@@ -21,8 +21,11 @@ def run(
     stdout=None,
     stderr=None,
     env=None,
-):
-    """Run neqo-client while capturing the traffic."""
+) -> bool:
+    """Run neqo-client while capturing the traffic.
+
+    Return True iff the capture was a success.
+    """
     with NamedTemporaryFile(mode="r") as keylog:
         with tcpdump(capture_filter="udp") as sniffer:
             (output, is_success) = _run_neqo(
@@ -37,6 +40,8 @@ def run(
 
             with open(pcap_file, mode="wb") as pcap:
                 pcap.write(pcap_bytes)
+
+        return is_success
 
 
 def is_run_successful(stdout_file: Union[str, Path]) -> bool:

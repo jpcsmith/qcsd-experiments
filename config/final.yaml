@@ -24,6 +24,7 @@ experiment:
     excess_values: [ 16, 350, 700, 1000, 2000 ]
   front_single_eval:
     scores:
+      pad_only: True
       ts_offset: {min: 0, max: 200, inc: 5}
       resample_rates: ["5ms", "25ms", "50ms"]
     front_config:
@@ -32,3 +33,13 @@ experiment:
       packet_size: 1200
       peak_minimum: 1
       peak_maximum: 14
+  tamaraw_single_eval:
+    scores:
+      pad_only: False
+      ts_offset: {min: 0, max: 200, inc: 5}
+      resample_rates: ["5ms", "25ms", "50ms"]
+    tamaraw_config:
+      packet_size: 750
+      rate_in: 0.005
+      rate_out: 0.02
+      pad_multiple: 100

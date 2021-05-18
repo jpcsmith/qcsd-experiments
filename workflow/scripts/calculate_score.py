@@ -4,60 +4,22 @@ import logging
 import itertools
 from pathlib import Path
 
+import fastdtw
+import pyinform
 import numpy as np
 import pandas as pd
 from scipy.stats import pearsonr
 from scipy.spatial.distance import euclidean, cosine
-import pyinform
-import fastdtw
 
 import common
 from common import timeseries, neqo
 
-
 _LOGGER = logging.getLogger(__name__)
+COLUMNS = ["sample", "rate", "dir", "pearsonr", "euclidean", "dtw",
+           "cosine", "mutual_info"]
 
 
-def simulate_with_lag(control, schedule, defended, offsets, rate="5ms"):
-    """Find the best offset such that the simulated trace formed by
-    combining the control and schedule where the schedule is lagged
-    the offset, has the lowest euclidean distance to the defended trace.
-    """
-    defended_in = timeseries.resample(defended["in"], rate)
-    simulated_out = control["out"].append(schedule["out"])
-
-    best_offset = 0
-    best_distance = np.inf
-    best_simulated = None
-
-    for offset in offsets:
-        shifted_schedule = pd.Series(
-            schedule["in"].values,
-            index=(schedule["in"].index + pd.Timedelta(f"{offset}ms"))
-        )
-        simulated_in = control["in"].append(shifted_schedule)
-
-        # Put together in a dataframe to ensure they have the same length and
-        # indices
-        frame = pd.DataFrame({
-            "defended": defended_in,
-            "simulated": timeseries.resample(simulated_in, rate),
-        }).fillna(0)
-
-        distance = euclidean(frame["defended"], frame["simulated"])
-        if distance < best_distance:
-            best_offset = offset
-            best_distance = distance
-            best_simulated = simulated_in
-
-    assert best_simulated is not None
-    return (
-        best_offset,
-        pd.DataFrame({"in": best_simulated, "out": simulated_out}).fillna(0)
-    )
-
-
-def main(input_, output, *, ts_offset, resample_rates):
+def main(input_, output, *, pad_only: bool, ts_offset, resample_rates):
     """Score how close a padding-only defended time series is to
     padding schedule.
 
@@ -74,28 +36,23 @@ def main(input_, output, *, ts_offset, resample_rates):
             when calculating the scores.
     """
     common.init_logging()
-    columns = ["sample", "rate", "dir", "pearsonr", "euclidean", "dtw",
-               "cosine", "mutual_info"]
 
     if (
         not neqo.is_run_successful(input_["control"])
         or not neqo.is_run_successful(input_["defended"])
     ):
         _LOGGER.info("Skipping as run was unsuccessful")
-        pd.DataFrame([], columns=columns).to_csv(output[0], index=False)
+        pd.DataFrame([], columns=COLUMNS).to_csv(output[0], index=False)
         return
-
-    sample = Path(input_["control"]).parent.name
 
     schedule_ts = timeseries.from_csv(input_["schedule"])
     control_ts = timeseries.from_pcap(input_["control_pcap"])
     defended_ts = timeseries.from_pcap(input_["defended_pcap"])
 
     offsets = range(ts_offset["min"], ts_offset["max"], ts_offset["inc"])
-    (offset, simulated_ts) = simulate_with_lag(
-        control_ts, schedule_ts, defended_ts, offsets,
+    simulated_ts = simulate_with_lag(
+        control_ts, schedule_ts, defended_ts, offsets, pad_only=pad_only
     )
-    _LOGGER.info("Using an incoming offset of %d ms", offset)
 
     results = []
     for rate, direction in itertools.product(resample_rates, ("in", "out")):
@@ -115,7 +72,7 @@ def main(input_, output, *, ts_offset, resample_rates):
             _LOGGER.error("Unable to compute mutalinfo: %s", err)
 
         results.append([
-            sample,
+            Path(input_["control"]).parent.name,  # Sample name
             rate,
             direction,
             pearsonr(series["a"], series["b"])[0],
@@ -125,7 +82,52 @@ def main(input_, output, *, ts_offset, resample_rates):
             mutual_info,
         ])
 
-    pd.DataFrame(results, columns=columns).to_csv(output[0], index=False)
+    pd.DataFrame(results, columns=COLUMNS).to_csv(output[0], index=False)
+
+
+def simulate_with_lag(
+    control, schedule, defended, offsets, rate="5ms", pad_only: bool = True
+):
+    """Find the best offset such that the simulated trace formed by
+    combining the control and schedule where the schedule is lagged
+    the offset, has the lowest euclidean distance to the defended trace.
+
+    When pad_only is False, the schedule is taken as the already
+    simulated trace
+    """
+    defended_in = timeseries.resample(defended["in"], rate)
+    simulated_out = (control["out"].append(schedule["out"]) if pad_only
+                     else schedule["out"])
+
+    best_offset = 0
+    best_distance = np.inf
+    best_simulated = None
+
+    for offset in offsets:
+        shifted_schedule = pd.Series(
+            schedule["in"].values,
+            index=(schedule["in"].index + pd.Timedelta(f"{offset}ms"))
+        )
+        simulated_in = (control["in"].append(shifted_schedule) if pad_only
+                        else shifted_schedule)
+
+        # Put together in a dataframe to ensure they have the same length and
+        # indices
+        frame = pd.DataFrame({
+            "defended": defended_in,
+            "simulated": timeseries.resample(simulated_in, rate),
+        }).fillna(0)
+
+        distance = euclidean(frame["defended"], frame["simulated"])
+        if distance < best_distance:
+            best_offset = offset
+            best_distance = distance
+            best_simulated = simulated_in
+
+    assert best_simulated is not None
+
+    _LOGGER.info("Using an incoming offset of %d ms", best_offset)
+    return pd.DataFrame({"in": best_simulated, "out": simulated_out}).fillna(0)
 
 
 if __name__ == "__main__":
