@@ -69,42 +69,12 @@ rule excess_msd__all_score:
         ).to_csv(output[0], index=False)
 
 
-# def excess_msd_collect_all__inputs(wildcards):
-#     dep_directory = checkpoints.url_dependency_graphs.get(**wildcards).output[0]
-#     sample_ids = glob_wildcards(dep_directory + "/{sample_id}.json").sample_id
-#
-#     emsd_config = config["experiment"]["excess_msd"]
-#     repetitions = [f"{rep:02d}" for rep in range(emsd_config["repetitions"])]
-#     inputs = expand(rules.excess_msd_collect.output["pcap"], sample_id=sample_ids,
-#                     rep_id=repetitions, excess_msd=emsd_config["excess_values"])
-#
-#     # Shuffle the order so that like experiments are less likely to run sequentially
-#     random.Random(278912).shuffle(inputs)
-#     return inputs
-#
-#
-# rule excess_msd_collect_all:
-#     """Collect multiple samples for the excess_msd experiment according to the
-#     configuration."""
-#     input:
-#         excess_msd_collect_all__inputs
-#
-#
-# rule excess_msd_plot:
-#     """Plot the result of the excess_msd experiment."""
-#     input:
-#         excess_msd_collect_all__inputs,
-#         schedule="results/excess_msd/constant_{rate}Mbps_{duration}s_{interval}ms.csv".format(
-#             **config["experiment"]["excess_msd"]["padding"]),
-#     output:
-#         trend_path=report("results/plots/excess-msd-success-rate.png",
-#                           category="Excess MSD Experiment"),
-#         heatmap_path=report("results/plots/excess-msd-heatmap.png",
-#                             category="Excess MSD Experiment"),
-#         pearson_path=report("results/plots/excess-msd-pearson.png",
-#                             category="Excess MSD Experiment"),
-#     params:
-#         base_dir="results/excess_msd",
-#         values=config["experiment"]["excess_msd"]["excess_values"]
-#     script:
-#         "../scripts/plot_excess_msd.py"
+rule excess_msd__plot:
+    input:
+        rules.excess_msd__all_score.output
+    output:
+        heatmap="results/plots/excess-msd-heatmap.pdf",
+        trend="results/plots/excess-msd-trend.pdf",
+        scores="results/plots/excess-msd-scores.pdf",
+    notebook:
+        "../notebooks/plot-excess-msd-results.ipynb"
