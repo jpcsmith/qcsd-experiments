@@ -17,16 +17,15 @@ neqo_log_level: "neqo=info"
 # The User-Agent to use for collections
 user_agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36"
 
+
 experiment:
+  scores:
+    ts_offset: {min: 0, max: 200, inc: 5}
+    resample_rates: ["5ms", "25ms", "50ms"]
   excess_msd:
-    repetitions: 1
     padding: { rate: 1, duration: 10, interval: 5 }  # Mbps, seconds, milliseconds
     excess_values: [ 16, 350, 700, 1000, 2000 ]
   front_single_eval:
-    scores:
-      pad_only: True
-      ts_offset: {min: 0, max: 200, inc: 5}
-      resample_rates: ["5ms", "25ms", "50ms"]
     front_config:
       max_client_packets: 2500
       max_server_packets: 2500
@@ -34,10 +33,6 @@ experiment:
       peak_minimum: 1
       peak_maximum: 14
   tamaraw_single_eval:
-    scores:
-      pad_only: False
-      ts_offset: {min: 0, max: 200, inc: 5}
-      resample_rates: ["5ms", "25ms", "50ms"]
     tamaraw_config:
       packet_size: 750
       rate_in: 0.005

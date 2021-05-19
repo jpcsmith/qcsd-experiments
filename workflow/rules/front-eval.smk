@@ -33,7 +33,9 @@ rule front_eval__score:
     log:
         "results/front-eval/{sample_id}_{rep_id}/scores.log"
     params:
-        **config["experiment"]["front_single_eval"]["scores"]
+        pad_only=True,
+        sample_id="{sample_id}_{rep_id}",
+        **config["experiment"]["scores"]
     script:
         "../scripts/calculate_score.py"
 

@@ -10,6 +10,7 @@ publicsuffixlist==0.7.7
 networkx==2.5
 fastdtw==0.3.4
 pyinform==0.2.0
+jupyterlab==3.0.15
 
 
 git+https://github.com/jpcsmith/wf-tools.git@v0.3.0#egg=lab

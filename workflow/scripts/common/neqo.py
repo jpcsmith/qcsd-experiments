@@ -13,6 +13,8 @@ from ipaddress import IPv4Address, IPv6Address, ip_address
 
 from lab.sniffer import TCPDumpPacketSniffer
 
+_LOGGER = logging.getLogger(__name__)
+
 
 def run(
     neqo_args,
@@ -77,15 +79,19 @@ def _run_neqo(
         if isinstance(stderr, (str, Path)):
             stderr = stack.enter_context(open(stderr, mode="w"))
 
+        env = env or {}
+        env["SSLKEYLOGFILE"] = keylog_file
         process_env = os.environ.copy()
-        process_env.update(env or {})
-        process_env["SSLKEYLOGFILE"] = keylog_file
+        process_env.update(env)
+        _LOGGER.info("Running NEQO with additional env vars: %s", env)
 
         is_success = False
         args = " ".join([(f"'{x}'" if " " in x else x) for x in neqo_args])
+        cmd = f"set -o pipefail; neqo-client {args} | tee {output_file.name}"
+        _LOGGER.info("Running NEQO with command: %r", cmd)
         try:
             subprocess.run(
-                f"set -o pipefail; neqo-client {args} | tee {output_file.name}",
+                cmd,
                 # We need the shell so that we can do redirection
                 shell=True, executable='bash', env=process_env,
                 # Raise an exception on program error codes
@@ -97,7 +103,7 @@ def _run_neqo(
         except subprocess.CalledProcessError as err:
             if not ignore_errors:
                 raise
-            logging.getLogger(__name__).error(err)
+            _LOGGER.error(err)
             is_success = False
 
         if ignore_errors:

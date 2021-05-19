@@ -2,7 +2,6 @@
 """
 import logging
 import itertools
-from pathlib import Path
 
 import fastdtw
 import pyinform
@@ -19,7 +18,9 @@ COLUMNS = ["sample", "rate", "dir", "pearsonr", "euclidean", "dtw",
            "cosine", "mutual_info"]
 
 
-def main(input_, output, *, pad_only: bool, ts_offset, resample_rates):
+def main(
+    input_, output, *, sample_id, pad_only: bool, ts_offset, resample_rates
+):
     """Score how close a padding-only defended time series is to
     padding schedule.
 
@@ -42,7 +43,8 @@ def main(input_, output, *, pad_only: bool, ts_offset, resample_rates):
         or not neqo.is_run_successful(input_["defended"])
     ):
         _LOGGER.info("Skipping as run was unsuccessful")
-        pd.DataFrame([], columns=COLUMNS).to_csv(output[0], index=False)
+        (pd.DataFrame([[sample_id, "", ""] + [np.NaN] * 5], columns=COLUMNS)
+         .to_csv(output[0], index=False))
         return
 
     schedule_ts = timeseries.from_csv(input_["schedule"])
@@ -72,7 +74,7 @@ def main(input_, output, *, pad_only: bool, ts_offset, resample_rates):
             _LOGGER.error("Unable to compute mutalinfo: %s", err)
 
         results.append([
-            Path(input_["control"]).parent.name,  # Sample name
+            sample_id,  # Sample name
             rate,
             direction,
             pearsonr(series["a"], series["b"])[0],
@@ -127,7 +129,11 @@ def simulate_with_lag(
     assert best_simulated is not None
 
     _LOGGER.info("Using an incoming offset of %d ms", best_offset)
-    return pd.DataFrame({"in": best_simulated, "out": simulated_out}).fillna(0)
+    return pd.DataFrame({
+        # Take the sum of any given time instance to handle rare duplicates
+        "in": best_simulated.groupby("time").sum(),
+        "out": simulated_out.groupby("time").sum(),
+    }).fillna(0)
 
 
 if __name__ == "__main__":
