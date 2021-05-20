@@ -18,6 +18,19 @@ url_deps:
   batch_size: 100
   n_batches: 12
 
+defaults:
+  front_config: &front-default
+    max_client_packets: 2500
+    max_server_packets: 2500
+    packet_size: 1200
+    peak_minimum: 1
+    peak_maximum: 14
+  tamaraw_config: &tamaraw-default
+    packet_size: 750
+    rate_in: 0.005
+    rate_out: 0.02
+    pad_multiple: 100
+
 experiment:
   scores:
     ts_offset: {min: 0, max: 200, inc: 5}
@@ -27,15 +40,15 @@ experiment:
     padding: { rate: 1, duration: 10, interval: 5 }  # Mbps, seconds, milliseconds
     excess_values: [ 16, 350, 700, 1000, 2000 ]
   front_single_eval:
-    front_config:
-      max_client_packets: 2500
-      max_server_packets: 2500
-      packet_size: 1200
-      peak_minimum: 1
-      peak_maximum: 14
+    max_samples: 1000
+    front_config: *front-default
   tamaraw_single_eval:
-    tamaraw_config:
-      packet_size: 750
-      rate_in: 0.005
-      rate_out: 0.02
-      pad_multiple: 100
+    max_samples: 1000
+    tamaraw_config: *tamaraw-default
+  ml_eval:
+    n_monitored: 100
+    n_per_monitored_inst: 100
+    n_unmonitored: 10_000
+    collect_extra: 0.15
+    front_config: *front-default
+    tamaraw_config: *tamaraw-default

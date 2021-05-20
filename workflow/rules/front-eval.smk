@@ -43,6 +43,9 @@ rule front_eval__score:
 def front_eval__all_score__inputs(wildcards):
     dep_directory = checkpoints.url_dependency_graphs.get(**wildcards).output[0]
     sample_ids = glob_wildcards(dep_directory + "/{sample_id}.json").sample_id
+
+    # Limit the samples
+    sample_ids = sample_ids[:config["experiment"]["front_single_eval"]["max_samples"]]
     return expand(rules.front_eval__score.output, sample_id=sample_ids, rep_id="00")
 
 

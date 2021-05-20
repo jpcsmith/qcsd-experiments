@@ -1,7 +1,3 @@
-scattergather:
-    depfetch=16
-
-
 rule depfetch_browser_image:
     """Build the browser image for determining URL dependencies."""
     input:

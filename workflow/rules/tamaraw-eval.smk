@@ -40,6 +40,9 @@ rule tamaraw_eval__score:
 def tamaraw_eval__all_score__inputs(wildcards):
     dep_directory = checkpoints.url_dependency_graphs.get(**wildcards).output[0]
     sample_ids = glob_wildcards(dep_directory + "/{sample_id}.json").sample_id
+
+    # Limit the samples
+    sample_ids = sample_ids[:config["experiment"]["tamaraw_single_eval"]["max_samples"]]
     return expand(rules.tamaraw_eval__score.output, sample_id=sample_ids, rep_id="00")
 
 
