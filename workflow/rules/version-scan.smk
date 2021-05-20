@@ -25,7 +25,6 @@ rule quic_version_scan__filtered:
                category="QUIC Scan"),
     log:
         "results/version-scan/scan-results.filtered.log"
-
     params:
         versions=config["quic_versions"],
         sld_domains=config["frequent_slds"],

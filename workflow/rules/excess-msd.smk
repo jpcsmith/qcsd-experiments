@@ -51,10 +51,19 @@ rule excess_msd__score:
 
 
 def excess_msd__all_score__inputs(wildcards):
+    excess_msd = config["experiment"]["excess_msd"]
+
+    # Get the sample ids for which we have dependency graphs
     dep_directory = checkpoints.url_dependency_graphs.get(**wildcards).output[0]
     sample_ids = glob_wildcards(dep_directory + "/{sample_id}.json").sample_id
-    return expand(rules.excess_msd__score.output, sample_id=sample_ids, rep_id="00",
-                  excess_msd=config["experiment"]["excess_msd"]["excess_values"])
+
+    # Limit the number of samples that will be collected
+    sample_ids = sample_ids[:excess_msd["max_samples"]]
+
+    return expand(
+        rules.excess_msd__score.output, sample_id=sample_ids, rep_id="00",
+        excess_msd=excess_msd["excess_values"]
+    )
 
 
 rule excess_msd__all_score:

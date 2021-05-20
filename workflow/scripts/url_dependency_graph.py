@@ -1,4 +1,4 @@
-"""Usage: module [options] [INFILE [PREFIX]]
+"""Usage: module [options] PREFIX INFILE...
 
 Filter browser URL request logs and extract dependency graphs.
 
@@ -13,8 +13,8 @@ Options:
         Output more log messages.
 """
 import json
-import gzip
 import logging
+import fileinput
 import urllib.parse
 from collections import Counter
 from typing import Set, Optional, Iterator, Dict, List
@@ -39,8 +39,8 @@ def origin(url: str) -> str:
     return f"{parts[0]}://{parts[1]}"
 
 
-class EmptyGraphError(RuntimeError):
-    """Raised when construnction would result in an empty graph."""
+class InvalidGraphError(RuntimeError):
+    """Raised when construction would result in an empty graph."""
 
 
 class _DependencyGraph:
@@ -67,8 +67,11 @@ class _DependencyGraph:
                 self._handle_response(msg)
             else:
                 continue
-        assert len(list(nx.simple_cycles(self.graph))) == 0
-        assert len(list(nx.nodes_with_selfloops(self.graph))) == 0
+
+        if self_loops := list(nx.nodes_with_selfloops(self.graph)):
+            raise InvalidGraphError(f"Graph contains self loops: {self_loops}")
+        if loops := list(nx.simple_cycles(self.graph)):
+            raise InvalidGraphError(f"Graph contains loops: {loops}")
 
         if self.origin is not None:
             to_drop = [node for node, node_origin in self.graph.nodes("origin")
@@ -76,7 +79,7 @@ class _DependencyGraph:
             self.graph.remove_nodes_from(to_drop)
 
             if len(self.graph) == 0:
-                raise EmptyGraphError(
+                raise InvalidGraphError(
                     f"Origin filtering would result in an empty graph:"
                     f" {self.origin}")
 
@@ -110,7 +113,7 @@ class _DependencyGraph:
 
     def _find_node_by_url(self, url: str) -> Optional[str]:
         """Find the most recent node associated with a get request."""
-        # TODO: Check these nodes for which is completed
+        # TODO: Check these nodes for which is completed?
         if not (node_ids := self._url_node_ids.get(url, [])):
             return None
         if nid := next(
@@ -118,13 +121,6 @@ class _DependencyGraph:
         ):
             return nid
         return node_ids[-1]
-
-        # nodes = [node for (node, data) in self.graph.nodes(data=True)
-        #          if data['url'] == url and data["done"]]
-        # if not nodes:
-        #     return None
-        # # Return the last node that was added
-        # return nodes[-1]
 
     def _add_origin_dependency(self, dep: str, node_id):
         """Add a dependency for node_id to the root with the same
@@ -190,7 +186,7 @@ def extract_graphs(fetch_output_generator) -> Iterator[nx.DiGraph]:
     }
 
     for result in fetch_output_generator:
-        url = result["final_url"]
+        url = result["final_url"] or result["url"]
 
         if result["status"] != "success":
             _LOGGER.debug(
@@ -206,7 +202,7 @@ def extract_graphs(fetch_output_generator) -> Iterator[nx.DiGraph]:
 
         try:
             graph = _DependencyGraph(result, origin(url))
-        except EmptyGraphError as err:
+        except InvalidGraphError as err:
             _LOGGER.debug("Dropping %r: %s", url, err)
             dropped_urls["empty"][url] += 1
             continue
@@ -227,23 +223,28 @@ def extract_graphs(fetch_output_generator) -> Iterator[nx.DiGraph]:
         _LOGGER.info("Dropped %s urls: %d", type_, sum(counters.values()))
 
 
-def main(infile: str, prefix: str, verbose: bool):
+def main(infile: List[str], prefix: str, verbose: bool):
     """Filter browser URL request logs and extract dependency graphs."""
     common.init_logging(int(verbose) + 1)
     _LOGGER.info("Running with arguments: %s.", locals())
 
     file_id = -1
-    with gzip.open(infile, mode="r") as json_lines:
+    with fileinput.input(files=infile, openhook=fileinput.hook_compressed) \
+            as json_lines:
         results = (json.loads(line) for line in json_lines)
 
         for file_id, graph in enumerate(extract_graphs(results)):
-            Path(f"{prefix}{file_id:04d}.json").write_text(graph.to_json())
+            path = Path(f"{prefix}{file_id:04d}.json")
+            if not path.is_file():
+                path.write_text(graph.to_json())
+            else:
+                _LOGGER.info("Refusing to overwrite: %s", path)
     _LOGGER.info("Script complete. Extracted %d dependency graphs.", file_id+1)
 
 
 if __name__ == "__main__":
     main(**doceasy.doceasy(__doc__, {
-        "INFILE": str,
+        "INFILE": [str],
         "PREFIX": doceasy.Or(str, doceasy.Use(lambda _: "x")),
         "--verbose": bool,
     }))
