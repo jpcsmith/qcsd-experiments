@@ -18,12 +18,15 @@ rule ml_eval__collect:
         control="results/ml-eval/dataset/{sample_id}_{rep_id}/control.log",
         front="results/ml-eval/dataset/{sample_id}_{rep_id}/front.log",
         tamaraw="results/ml-eval/dataset/{sample_id}_{rep_id}/tamaraw.log",
+    params:
+        # Assume at most 1000 reps and construct seed as (sample-id * 1000) + rep
+        seed=lambda w: int(w["sample_id"]) * 1000 + int(w["rep_id"])
     threads: 2
     script:
         "../scripts/collect_ml_sample.py"
 
 
-def ml_eval__all_collect__inputs(wildcards):
+def ml_eval__dataset__inputs(wildcards):
     ml_eval = config["experiment"]["ml_eval"]
 
     # Get the sample ids for which we have dependency graphs
@@ -37,11 +40,16 @@ def ml_eval__all_collect__inputs(wildcards):
 
     return {
         "monitored": expand(
-          rules.ml_eval__colect.output, sample_id=sample_ids[:n_mon_collect],
+          rules.ml_eval__collect.output, sample_id=sample_ids[:n_mon_collect],
           rep_id=map("{:02d}".format, range(n_mon_collect_rep))
         ),
         "unmonitored": expand(
-          rules.ml_eval__colect.output, rep_id="00",
+          rules.ml_eval__collect.output, rep_id="00",
           sample_id=sample_ids[n_mon_collect:(n_mon_collect + n_unmon_collect)]
         )
     }
+
+
+rule ml_eval__dataset:
+    input:
+        unpack(ml_eval__dataset__inputs)

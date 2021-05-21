@@ -47,7 +47,7 @@ experiment:
     tamaraw_config: *tamaraw-default
   ml_eval:
     n_monitored: 10
-    n_per_monitored_inst: 10
+    n_per_monitored_inst: 3
     n_unmonitored: 20
     collect_extra: 0.15
     front_config: *front-default

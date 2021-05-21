@@ -16,7 +16,7 @@ user_agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gec
 
 url_deps:
   batch_size: 100
-  n_batches: 12
+  n_batches: 120
 
 defaults:
   front_config: &front-default

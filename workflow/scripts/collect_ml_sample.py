@@ -52,6 +52,30 @@ def main(input_, output, log, params, config):
     ):
         _exit_gracefully("control collection failed", output)
 
+    # Generate the Tamaraw schedule
+    control_trace = _load_trace(output["control_pcap"])
+    trace = tamaraw.simulate(control_trace, **ml_eval["tamaraw_config"])
+    pd.DataFrame(trace).to_csv(
+        output["tamaraw_schedule"], header=False, index=False
+    )
+
+    if not neqo.run(
+        args + [
+            "--target-trace", str(output["tamaraw_schedule"]),
+            "--pad-only-mode", "false",  # False to enable shaping
+        ],
+        stdout=output["tamaraw"],
+        stderr=log["tamaraw"],
+        pcap_file=output["tamaraw_pcap"],
+        env={"RUST_LOG": config["neqo_log_level"]},
+        ignore_errors=True,
+    ):
+        _exit_gracefully("Tamaraw collection failed", output)
+
+    # Collect FRONT last since it has a tendency to generate tail packets that
+    # are spaced very far apart resulting in timeouts even though the majority
+    # of the data was collected.
+    #
     # Generate the FRONT padding schedule
     trace = front.generate_padding(
         **config["experiment"]["ml_eval"]["front_config"],
@@ -73,26 +97,6 @@ def main(input_, output, log, params, config):
         ignore_errors=True,
     ):
         _exit_gracefully("FRONT collection failed", output)
-
-    # Generate the Tamaraw schedule
-    control_trace = _load_trace(output["control_pcap"])
-    trace = tamaraw.simulate(control_trace, **ml_eval["tamaraw_config"])
-    pd.DataFrame(trace).to_csv(
-        output["tamaraw_schedule"], header=False, index=False
-    )
-
-    if not neqo.run(
-        args + [
-            "--target-trace", str(output["tamaraw_schedule"]),
-            "--pad-only-mode", "false",  # False to enable shaping
-        ],
-        stdout=output["tamaraw"],
-        stderr=log["tamaraw"],
-        pcap_file=output["tamaraw_pcap"],
-        env={"RUST_LOG": config["neqo_log_level"]},
-        ignore_errors=True,
-    ):
-        _exit_gracefully("Tamaraw collection failed", output)
 
     _LOGGER.info("All collections were successful.")
 
