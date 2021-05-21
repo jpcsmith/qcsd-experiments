@@ -54,6 +54,24 @@ def is_run_successful(stdout_file: Union[str, Path]) -> bool:
         return b">>> SUCCESS <<<" in file_.read()
 
 
+def is_run_almost_successful(
+    stdout_file: Union[str, Path], remaining: int
+) -> bool:
+    """Return true iff the run was successful or had at most
+    `remaining` packets remaining to collect.
+    """
+    if is_run_successful(stdout_file):
+        return True
+
+    tag = "[FlowShaper] final remaining packets:"
+    with open(stdout_file, mode="r") as stdout:
+        count = min(
+            (int(line[len(tag):]) for line in stdout if line.startswith(tag)),
+            default=None
+        )
+        return count is not None and count <= remaining
+
+
 @contextlib.contextmanager
 def tcpdump(*args, **kwargs):
     """Sniff packets within a context manager using tcpdump.
