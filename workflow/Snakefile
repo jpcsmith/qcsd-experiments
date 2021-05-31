@@ -1,0 +1,19 @@
+import sys
+
+
+configfile: "config/config.yaml"
+
+#: Ensure that the rules can find any modules defined in workflow/scripts/
+sys.path.append("workflow/scripts/")
+
+
+include: "rules/common.smk"
+include: "rules/alexa.smk"
+include: "rules/schedules.smk"
+include: "rules/version-scan.smk"
+include: "rules/determine-url-deps.smk"
+include: "rules/excess-msd.smk"
+include: "rules/delay-vs-drop.smk"
+include: "rules/front-eval.smk"
+include: "rules/tamaraw-eval.smk"
+include: "rules/ml-eval-dataset.smk"

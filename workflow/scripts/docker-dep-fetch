@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Wrapper to execute the script docker/dep-fetch/fetch-script within
+# the image built from docker/dep-fetch.
+#
+# Handles configuring the "docker run" command
+
+set -o errexit
+set -o nounset
+
+readonly IMAGE_NAME=dep-fetch
+
+DOCKER_RUN_ARGS=()
+# Disable the log driver so that if the output is streamed, it doesnt saturate
+# docker's logs
+DOCKER_RUN_ARGS+=(-i --rm --log-driver none)
+# Needed for the use of wireguard
+DOCKER_RUN_ARGS+=(--privileged --cap-add NET_ADMIN --cap-add SYS_MODULE)
+# Mimic the script location outside of the container and mount the results
+# directory to allow for easy in/output
+DOCKER_RUN_ARGS+=(--workdir "$PWD" --volume "$PWD/results:$PWD/results")
+# Use public DNS instead of a potentially unroutable private DNS address
+DOCKER_RUN_ARGS+=(--dns "8.8.8.8" --dns "9.9.9.9")
+# Constrain the CPU and memory usage to allow for parallel invocations
+DOCKER_RUN_ARGS+=(--memory "1.5g" --memory-reservation 1g --cpus 2)
+
+exec docker run "${DOCKER_RUN_ARGS[@]}" "${IMAGE_NAME}" "$@"
