@@ -1,3 +1,7 @@
+wildcard_constraints:
+    setting="monitored|unmonitored"
+
+
 rule ml_eval__collect:
     input:
         url_dep="results/determine-url-deps/dependencies/{sample_id}.json"
@@ -33,23 +37,53 @@ def ml_eval__dataset__inputs(wildcards):
     dep_directory = checkpoints.url_dependency_graphs.get(**wildcards).output[0]
     sample_ids = glob_wildcards(dep_directory + "/{sample_id}.json").sample_id
 
-    # Collect 1.XX times the samples to account for failures, rounded up
-    n_mon_collect = int(ml_eval["n_monitored"]  * (1 + ml_eval["collect_extra"]) + 0.5)
-    n_mon_collect_rep = ml_eval["n_per_monitored_inst"]
-    n_unmon_collect = int(ml_eval["n_unmonitored"]  * (1 + ml_eval["collect_extra"]) + 0.5)
+    # Determine the IDs of the samples to use for the monitored and unmonitored
+    n_monitored = ml_eval["monitored"]
+    n_mon_collect = int(n_monitored["samples"] * (1 + n_monitored["extra"]) + 0.5)
 
-    return {
-        "monitored": expand(
-          rules.ml_eval__collect.output, sample_id=sample_ids[:n_mon_collect],
-          rep_id=map("{:02d}".format, range(n_mon_collect_rep))
-        ),
-        "unmonitored": expand(
-          rules.ml_eval__collect.output, rep_id="00",
-          sample_id=sample_ids[n_mon_collect:(n_mon_collect + n_unmon_collect)]
+    n_unmonitored = ml_eval["unmonitored"]
+    n_unmon_collect = int(n_unmonitored["samples"] * (1 + n_unmonitored["extra"]) + 0.5)
+
+    n_required = n_mon_collect + n_unmon_collect
+    assert len(sample_ids) >= n_required, (
+        f"not enough urls for dataset, reqiured: {n_required}, available: {len(sample_ids)}"
+    )
+
+    rep_ids = [f"{i:02d}" for i in range(ml_eval[wildcards["setting"]]["instances"])]
+    if wildcards["setting"] == "monitored":
+        return expand(
+            rules.ml_eval__collect.output, sample_id=sample_ids[:n_mon_collect],
+            rep_id=rep_ids,
         )
-    }
+    return expand(
+        rules.ml_eval__collect.output, rep_id=rep_ids,
+        sample_id=sample_ids[n_mon_collect:(n_mon_collect + n_unmon_collect)],
+    )
 
 
 rule ml_eval__dataset:
     input:
-        unpack(ml_eval__dataset__inputs)
+        ml_eval__dataset__inputs
+    output:
+        "results/ml-eval/{setting}-{defence}.h5",
+    params:
+        setting="{setting}",
+        defence="{defence}",
+        simulate=False,
+    threads: 16
+    script:
+        "../scripts/create_datasets.py"
+
+
+rule ml_eval__simulated_dataset:
+    input:
+        ml_eval__dataset__inputs
+    output:
+        "results/ml-eval/{setting}-sim-{defence}.h5",
+    params:
+        setting="{setting}",
+        defence="{defence}",
+        simulate=True,
+    threads: 16
+    script:
+        "../scripts/create_datasets.py"

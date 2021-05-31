@@ -1,3 +1,6 @@
+from pathlib import Path
+
+
 rule tamaraw_eval__collect:
     """Collect a control and defended sample with the Tamaraw defence."""
     input:
@@ -54,7 +57,7 @@ rule tamaraw_eval__all_score:
         "results/tamaraw-eval/scores.csv"
     run:
         pd.concat(
-            [pd.read_csv(f) for f in input], ignore_index=True
+            [pd.read_csv(f) for f in input if Path(f).stat().st_size != 0], ignore_index=True
         ).to_csv(output[0], index=False)
 
 
@@ -63,5 +66,7 @@ rule tamaraw_eval__plot:
         rules.tamaraw_eval__all_score.output
     output:
         "results/plots/tamaraw-eval-plot.pdf"
+    params:
+        use_pearson=False
     notebook:
         "../notebooks/plot-scores.ipynb"

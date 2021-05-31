@@ -37,6 +37,11 @@ def main(input_, output, log, params, config):
         ignore_errors=True,
     )
 
+    if "drop_unsat_events" in params.keys():
+        args += [
+            "--drop-unsat-events", str(params["drop_unsat_events"]).lower()
+        ]
+
     # Run the front setting
     neqo.run(
         args + [

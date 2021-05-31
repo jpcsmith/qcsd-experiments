@@ -33,7 +33,7 @@ def _load_trace(filename) -> np.ndarray:
     )
 
 
-def main(input_, output, log, config):
+def main(input_, output, log, params, config):
     """Collect a control and Tamaraw defended PCAP. The Tamaraw schedule
     is constructed on the basis of the control PCAP.
     """
@@ -69,6 +69,11 @@ def main(input_, output, log, config):
     trace = tamaraw.simulate(control_trace, **exp_config["tamaraw_config"])
     pd.DataFrame(trace).to_csv(output["schedule"], header=False, index=False)
 
+    if "drop_unsat_events" in params.keys():
+        args += [
+            "--drop-unsat-events", str(params["drop_unsat_events"]).lower()
+        ]
+
     # Run the Tamaraw setting
     neqo.run(
         args + [
@@ -89,5 +94,6 @@ if __name__ == "__main__":
         input_=snakemake.input,
         output=snakemake.output,
         log=snakemake.log,
-        config=snakemake.config
+        params=dict(snakemake.params),
+        config=dict(snakemake.config),
     )

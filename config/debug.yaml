@@ -39,6 +39,8 @@ experiment:
     max_samples: 100
     padding: { rate: 1, duration: 10, interval: 5 }  # Mbps, seconds, milliseconds
     excess_values: [ 16, 350, 700, 1000, 2000 ]
+  delay_vs_drop:
+    max_samples: 10
   front_single_eval:
     max_samples: 100
     front_config: *front-default

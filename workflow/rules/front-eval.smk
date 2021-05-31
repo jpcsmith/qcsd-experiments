@@ -1,3 +1,6 @@
+from pathlib import Path
+
+
 rule front_eval__collect:
     """Collect a control and defended sample with the FRONT defence."""
     input:
@@ -57,7 +60,7 @@ rule front_eval__all_score:
         "results/front-eval/scores.csv"
     run:
         pd.concat(
-            [pd.read_csv(f) for f in input], ignore_index=True
+            [pd.read_csv(f) for f in input if Path(f).stat().st_size != 0], ignore_index=True
         ).to_csv(output[0], index=False)
 
 

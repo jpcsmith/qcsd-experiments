@@ -1,796 +1,150 @@
-import io
 import logging
-import subprocess
 from pathlib import Path
+from typing import Dict, List
+from concurrent.futures import ThreadPoolExecutor
 
 import h5py
 import numpy as np
-import pandas as pd
 import lab.tracev2 as trace
-from lab.defences import PACKET_DTYPE, front
+from lab.defences import front
 
 import common
-from common import neqo, timeseries
-
+from common import neqo
 
 _LOGGER = logging.getLogger(__name__)
 
 
-def main(input_, outfile: str, defence: str, simulate: bool,
-         n_samples, n_instances):
-    common.init_logging(verbosity=2)
+class InsufficientSamplesError(Exception):
+    """Raised if there are insufficient samples."""
 
-    sample_counts = dict()
-    sample_paths = np.unique(list(Path(filepath).parent for filepath in input_))
 
-    with h5py.File(outfile, mode="w") as hdf:
+def main(
+    input_: List[str],
+    output: str,
+    defence: str,
+    setting: str,
+    simulate: bool,
+    config: Dict,
+):
+    common.init_logging()
+
+    n_samples = config["experiment"]["ml_eval"][setting]["samples"]
+    assert n_samples >= 1, "must be at least 1 sample required"
+    n_instances = config["experiment"]["ml_eval"][setting]["instances"]
+    assert n_instances >= 1, "must be at least 1 instance per sample"
+    assert isinstance(simulate, bool), "simulate not boolean?"
+
+    directories = np.unique(list(Path(f).parent for f in input_))
+    _LOGGER.info("Processing %d directories of %d files.", len(directories),
+                 len(input_))
+
+    # Counts of sample ids and the number of instances found
+    counts: Dict[int, int] = dict()
+
+    with h5py.File(output, mode="w") as hdf, ThreadPoolExecutor() as executor:
         for (key, dtype) in [
             ("/labels", np.dtype([("sample", "i4"), ("rep", "i4")])),
             ("/sizes", h5py.vlen_dtype(np.dtype("i4"))),
             ("/timestamps", h5py.vlen_dtype(np.dtype(float))),
         ]:
-            print(key)
             hdf.create_dataset(key, dtype=dtype, shape=(n_samples*n_instances,))
-        _LOGGER.info("Initialised HDF5 file at: %r", outfile)
+        _LOGGER.info("Initialised HDF5 file at: %r", output)
+
+        selected = _count_samples(directories, defence, n_samples, n_instances)
 
         index = 0
-        for directory in sample_paths:
-            if (
-                not neqo.is_run_successful(directory/"control.stdout.txt")
-                or not neqo.is_run_almost_successful(
-                    directory/f"{defence}.stdout.txt", 10
-                )
-            ):
-                _LOGGER.debug("Skipping due to failure: %s", directory)
-                continue
+        for (sample_id, rep_id, sample_trace) in executor.map(
+            lambda directory: _extract_sample(directory, defence, simulate),
+            directories
+        ):
+            case_id = f"{sample_id}_{rep_id}"
 
-            assert len(sample_counts) <= n_samples
-            if len(sample_counts) == n_samples:
-                _LOGGER.debug(
-                    "Skipping as we have enough samples: %s", directory
-                )
-                continue
-
-            sample_id, rep_id = map(int, str(directory.name).split("_"))
-
-            assert sample_counts.get(sample_id, 0) <= n_instances
-            if sample_counts.get(sample_id, 0) == n_instances:
-                _LOGGER.debug(
-                    "Skipping as we have enough instances: %s", directory
-                )
-                continue
-
-            if not simulate:
-                sample_trace = trace.from_pcap(directory/f"{defence}.pcapng")
+            if sample_trace is None:
+                _LOGGER.debug("Skipping due to failure: %s", case_id)
+            elif sample_id not in selected:
+                _LOGGER.debug("Skipping due to unselected: %s", case_id)
+            elif counts.get(sample_id, 0) == n_instances:
+                _LOGGER.debug("Skipping due to enough instances: %s", case_id)
             else:
-                control = trace.from_pcap(directory/"control.pcapng")
-                schedule = trace.from_csv(directory/f"{defence}-schedule.csv")
+                hdf["/labels"][index] = (sample_id, rep_id)
+                hdf["/sizes"][index] = sample_trace["size"]
+                hdf["/timestamps"][index] = sample_trace["time"]
 
-                if defence == "front":
-                    sample_trace = front.simulate(control, schedule)
-                else:
-                    raise ValueError(f"Unknown defence {defence!r}")
+                counts[sample_id] = counts.get(sample_id, 0) + 1
+                index += 1
 
-            hdf["/labels"][index] = (sample_id, rep_id)
-            hdf["/sizes"][index] = sample_trace["size"]
-            hdf["/timestamps"][index] = sample_trace["time"]
+                if index in np.linspace(0, 10000, 10, dtype=int):
+                    complete = index * 100 / (n_samples * n_instances)
+                    _LOGGER.info("Progress: %f%% complete", complete)
 
-            sample_counts[sample_id] = sample_counts.get(sample_id, 0) + 1
-            index += 1
-        _LOGGER.info("Done iterating through %d files.", sum(sample_counts.values()))
+        _LOGGER.info("Done iterating through %d files.", sum(counts.values()))
 
 
-file_list = [
-    "results/ml-eval/dataset/0000_00/control.log",
-    "results/ml-eval/dataset/0000_00/control.pcapng",
-    "results/ml-eval/dataset/0000_00/control.stdout.txt",
-    "results/ml-eval/dataset/0000_00/front-schedule.csv",
-    "results/ml-eval/dataset/0000_00/front.log",
-    "results/ml-eval/dataset/0000_00/front.pcapng",
-    "results/ml-eval/dataset/0000_00/front.stdout.txt",
-    "results/ml-eval/dataset/0000_00/script.log",
-    "results/ml-eval/dataset/0000_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0000_00/tamaraw.log",
-    "results/ml-eval/dataset/0000_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0000_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0000_01/control.log",
-    "results/ml-eval/dataset/0000_01/control.pcapng",
-    "results/ml-eval/dataset/0000_01/control.stdout.txt",
-    "results/ml-eval/dataset/0000_01/front-schedule.csv",
-    "results/ml-eval/dataset/0000_01/front.log",
-    "results/ml-eval/dataset/0000_01/front.pcapng",
-    "results/ml-eval/dataset/0000_01/front.stdout.txt",
-    "results/ml-eval/dataset/0000_01/script.log",
-    "results/ml-eval/dataset/0000_01/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0000_01/tamaraw.log",
-    "results/ml-eval/dataset/0000_01/tamaraw.pcapng",
-    "results/ml-eval/dataset/0000_01/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0000_02/control.log",
-    "results/ml-eval/dataset/0000_02/control.pcapng",
-    "results/ml-eval/dataset/0000_02/control.stdout.txt",
-    "results/ml-eval/dataset/0000_02/front-schedule.csv",
-    "results/ml-eval/dataset/0000_02/front.log",
-    "results/ml-eval/dataset/0000_02/front.pcapng",
-    "results/ml-eval/dataset/0000_02/front.stdout.txt",
-    "results/ml-eval/dataset/0000_02/script.log",
-    "results/ml-eval/dataset/0000_02/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0000_02/tamaraw.log",
-    "results/ml-eval/dataset/0000_02/tamaraw.pcapng",
-    "results/ml-eval/dataset/0000_02/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0001_00/control.log",
-    "results/ml-eval/dataset/0001_00/control.pcapng",
-    "results/ml-eval/dataset/0001_00/control.stdout.txt",
-    "results/ml-eval/dataset/0001_00/front-schedule.csv",
-    "results/ml-eval/dataset/0001_00/front.log",
-    "results/ml-eval/dataset/0001_00/front.pcapng",
-    "results/ml-eval/dataset/0001_00/front.stdout.txt",
-    "results/ml-eval/dataset/0001_00/script.log",
-    "results/ml-eval/dataset/0001_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0001_00/tamaraw.log",
-    "results/ml-eval/dataset/0001_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0001_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0001_01/control.log",
-    "results/ml-eval/dataset/0001_01/control.pcapng",
-    "results/ml-eval/dataset/0001_01/control.stdout.txt",
-    "results/ml-eval/dataset/0001_01/front-schedule.csv",
-    "results/ml-eval/dataset/0001_01/front.log",
-    "results/ml-eval/dataset/0001_01/front.pcapng",
-    "results/ml-eval/dataset/0001_01/front.stdout.txt",
-    "results/ml-eval/dataset/0001_01/script.log",
-    "results/ml-eval/dataset/0001_01/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0001_01/tamaraw.log",
-    "results/ml-eval/dataset/0001_01/tamaraw.pcapng",
-    "results/ml-eval/dataset/0001_01/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0001_02/control.log",
-    "results/ml-eval/dataset/0001_02/control.pcapng",
-    "results/ml-eval/dataset/0001_02/control.stdout.txt",
-    "results/ml-eval/dataset/0001_02/front-schedule.csv",
-    "results/ml-eval/dataset/0001_02/front.log",
-    "results/ml-eval/dataset/0001_02/front.pcapng",
-    "results/ml-eval/dataset/0001_02/front.stdout.txt",
-    "results/ml-eval/dataset/0001_02/script.log",
-    "results/ml-eval/dataset/0001_02/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0001_02/tamaraw.log",
-    "results/ml-eval/dataset/0001_02/tamaraw.pcapng",
-    "results/ml-eval/dataset/0001_02/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0002_00/control.log",
-    "results/ml-eval/dataset/0002_00/control.pcapng",
-    "results/ml-eval/dataset/0002_00/control.stdout.txt",
-    "results/ml-eval/dataset/0002_00/front-schedule.csv",
-    "results/ml-eval/dataset/0002_00/front.log",
-    "results/ml-eval/dataset/0002_00/front.pcapng",
-    "results/ml-eval/dataset/0002_00/front.stdout.txt",
-    "results/ml-eval/dataset/0002_00/script.log",
-    "results/ml-eval/dataset/0002_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0002_00/tamaraw.log",
-    "results/ml-eval/dataset/0002_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0002_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0002_01/control.log",
-    "results/ml-eval/dataset/0002_01/control.pcapng",
-    "results/ml-eval/dataset/0002_01/control.stdout.txt",
-    "results/ml-eval/dataset/0002_01/front-schedule.csv",
-    "results/ml-eval/dataset/0002_01/front.log",
-    "results/ml-eval/dataset/0002_01/front.pcapng",
-    "results/ml-eval/dataset/0002_01/front.stdout.txt",
-    "results/ml-eval/dataset/0002_01/script.log",
-    "results/ml-eval/dataset/0002_01/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0002_01/tamaraw.log",
-    "results/ml-eval/dataset/0002_01/tamaraw.pcapng",
-    "results/ml-eval/dataset/0002_01/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0002_02/control.log",
-    "results/ml-eval/dataset/0002_02/control.pcapng",
-    "results/ml-eval/dataset/0002_02/control.stdout.txt",
-    "results/ml-eval/dataset/0002_02/front-schedule.csv",
-    "results/ml-eval/dataset/0002_02/front.log",
-    "results/ml-eval/dataset/0002_02/front.pcapng",
-    "results/ml-eval/dataset/0002_02/front.stdout.txt",
-    "results/ml-eval/dataset/0002_02/script.log",
-    "results/ml-eval/dataset/0002_02/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0002_02/tamaraw.log",
-    "results/ml-eval/dataset/0002_02/tamaraw.pcapng",
-    "results/ml-eval/dataset/0002_02/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0003_00/control.log",
-    "results/ml-eval/dataset/0003_00/control.pcapng",
-    "results/ml-eval/dataset/0003_00/control.stdout.txt",
-    "results/ml-eval/dataset/0003_00/front-schedule.csv",
-    "results/ml-eval/dataset/0003_00/front.log",
-    "results/ml-eval/dataset/0003_00/front.pcapng",
-    "results/ml-eval/dataset/0003_00/front.stdout.txt",
-    "results/ml-eval/dataset/0003_00/script.log",
-    "results/ml-eval/dataset/0003_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0003_00/tamaraw.log",
-    "results/ml-eval/dataset/0003_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0003_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0003_01/control.log",
-    "results/ml-eval/dataset/0003_01/control.pcapng",
-    "results/ml-eval/dataset/0003_01/control.stdout.txt",
-    "results/ml-eval/dataset/0003_01/front-schedule.csv",
-    "results/ml-eval/dataset/0003_01/front.log",
-    "results/ml-eval/dataset/0003_01/front.pcapng",
-    "results/ml-eval/dataset/0003_01/front.stdout.txt",
-    "results/ml-eval/dataset/0003_01/script.log",
-    "results/ml-eval/dataset/0003_01/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0003_01/tamaraw.log",
-    "results/ml-eval/dataset/0003_01/tamaraw.pcapng",
-    "results/ml-eval/dataset/0003_01/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0003_02/control.log",
-    "results/ml-eval/dataset/0003_02/control.pcapng",
-    "results/ml-eval/dataset/0003_02/control.stdout.txt",
-    "results/ml-eval/dataset/0003_02/front-schedule.csv",
-    "results/ml-eval/dataset/0003_02/front.log",
-    "results/ml-eval/dataset/0003_02/front.pcapng",
-    "results/ml-eval/dataset/0003_02/front.stdout.txt",
-    "results/ml-eval/dataset/0003_02/script.log",
-    "results/ml-eval/dataset/0003_02/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0003_02/tamaraw.log",
-    "results/ml-eval/dataset/0003_02/tamaraw.pcapng",
-    "results/ml-eval/dataset/0003_02/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0004_00/control.log",
-    "results/ml-eval/dataset/0004_00/control.pcapng",
-    "results/ml-eval/dataset/0004_00/control.stdout.txt",
-    "results/ml-eval/dataset/0004_00/front-schedule.csv",
-    "results/ml-eval/dataset/0004_00/front.log",
-    "results/ml-eval/dataset/0004_00/front.pcapng",
-    "results/ml-eval/dataset/0004_00/front.stdout.txt",
-    "results/ml-eval/dataset/0004_00/script.log",
-    "results/ml-eval/dataset/0004_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0004_00/tamaraw.log",
-    "results/ml-eval/dataset/0004_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0004_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0004_01/control.log",
-    "results/ml-eval/dataset/0004_01/control.pcapng",
-    "results/ml-eval/dataset/0004_01/control.stdout.txt",
-    "results/ml-eval/dataset/0004_01/front-schedule.csv",
-    "results/ml-eval/dataset/0004_01/front.log",
-    "results/ml-eval/dataset/0004_01/front.pcapng",
-    "results/ml-eval/dataset/0004_01/front.stdout.txt",
-    "results/ml-eval/dataset/0004_01/script.log",
-    "results/ml-eval/dataset/0004_01/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0004_01/tamaraw.log",
-    "results/ml-eval/dataset/0004_01/tamaraw.pcapng",
-    "results/ml-eval/dataset/0004_01/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0004_02/control.log",
-    "results/ml-eval/dataset/0004_02/control.pcapng",
-    "results/ml-eval/dataset/0004_02/control.stdout.txt",
-    "results/ml-eval/dataset/0004_02/front-schedule.csv",
-    "results/ml-eval/dataset/0004_02/front.log",
-    "results/ml-eval/dataset/0004_02/front.pcapng",
-    "results/ml-eval/dataset/0004_02/front.stdout.txt",
-    "results/ml-eval/dataset/0004_02/script.log",
-    "results/ml-eval/dataset/0004_02/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0004_02/tamaraw.log",
-    "results/ml-eval/dataset/0004_02/tamaraw.pcapng",
-    "results/ml-eval/dataset/0004_02/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0005_00/control.log",
-    "results/ml-eval/dataset/0005_00/control.pcapng",
-    "results/ml-eval/dataset/0005_00/control.stdout.txt",
-    "results/ml-eval/dataset/0005_00/front-schedule.csv",
-    "results/ml-eval/dataset/0005_00/front.log",
-    "results/ml-eval/dataset/0005_00/front.pcapng",
-    "results/ml-eval/dataset/0005_00/front.stdout.txt",
-    "results/ml-eval/dataset/0005_00/script.log",
-    "results/ml-eval/dataset/0005_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0005_00/tamaraw.log",
-    "results/ml-eval/dataset/0005_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0005_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0005_01/control.log",
-    "results/ml-eval/dataset/0005_01/control.pcapng",
-    "results/ml-eval/dataset/0005_01/control.stdout.txt",
-    "results/ml-eval/dataset/0005_01/front-schedule.csv",
-    "results/ml-eval/dataset/0005_01/front.log",
-    "results/ml-eval/dataset/0005_01/front.pcapng",
-    "results/ml-eval/dataset/0005_01/front.stdout.txt",
-    "results/ml-eval/dataset/0005_01/script.log",
-    "results/ml-eval/dataset/0005_01/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0005_01/tamaraw.log",
-    "results/ml-eval/dataset/0005_01/tamaraw.pcapng",
-    "results/ml-eval/dataset/0005_01/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0005_02/control.log",
-    "results/ml-eval/dataset/0005_02/control.pcapng",
-    "results/ml-eval/dataset/0005_02/control.stdout.txt",
-    "results/ml-eval/dataset/0005_02/front-schedule.csv",
-    "results/ml-eval/dataset/0005_02/front.log",
-    "results/ml-eval/dataset/0005_02/front.pcapng",
-    "results/ml-eval/dataset/0005_02/front.stdout.txt",
-    "results/ml-eval/dataset/0005_02/script.log",
-    "results/ml-eval/dataset/0005_02/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0005_02/tamaraw.log",
-    "results/ml-eval/dataset/0005_02/tamaraw.pcapng",
-    "results/ml-eval/dataset/0005_02/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0006_00/control.log",
-    "results/ml-eval/dataset/0006_00/control.pcapng",
-    "results/ml-eval/dataset/0006_00/control.stdout.txt",
-    "results/ml-eval/dataset/0006_00/front-schedule.csv",
-    "results/ml-eval/dataset/0006_00/front.log",
-    "results/ml-eval/dataset/0006_00/front.pcapng",
-    "results/ml-eval/dataset/0006_00/front.stdout.txt",
-    "results/ml-eval/dataset/0006_00/script.log",
-    "results/ml-eval/dataset/0006_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0006_00/tamaraw.log",
-    "results/ml-eval/dataset/0006_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0006_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0006_01/control.log",
-    "results/ml-eval/dataset/0006_01/control.pcapng",
-    "results/ml-eval/dataset/0006_01/control.stdout.txt",
-    "results/ml-eval/dataset/0006_01/front-schedule.csv",
-    "results/ml-eval/dataset/0006_01/front.log",
-    "results/ml-eval/dataset/0006_01/front.pcapng",
-    "results/ml-eval/dataset/0006_01/front.stdout.txt",
-    "results/ml-eval/dataset/0006_01/script.log",
-    "results/ml-eval/dataset/0006_01/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0006_01/tamaraw.log",
-    "results/ml-eval/dataset/0006_01/tamaraw.pcapng",
-    "results/ml-eval/dataset/0006_01/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0006_02/control.log",
-    "results/ml-eval/dataset/0006_02/control.pcapng",
-    "results/ml-eval/dataset/0006_02/control.stdout.txt",
-    "results/ml-eval/dataset/0006_02/front-schedule.csv",
-    "results/ml-eval/dataset/0006_02/front.log",
-    "results/ml-eval/dataset/0006_02/front.pcapng",
-    "results/ml-eval/dataset/0006_02/front.stdout.txt",
-    "results/ml-eval/dataset/0006_02/script.log",
-    "results/ml-eval/dataset/0006_02/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0006_02/tamaraw.log",
-    "results/ml-eval/dataset/0006_02/tamaraw.pcapng",
-    "results/ml-eval/dataset/0006_02/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0007_00/control.log",
-    "results/ml-eval/dataset/0007_00/control.pcapng",
-    "results/ml-eval/dataset/0007_00/control.stdout.txt",
-    "results/ml-eval/dataset/0007_00/front-schedule.csv",
-    "results/ml-eval/dataset/0007_00/front.log",
-    "results/ml-eval/dataset/0007_00/front.pcapng",
-    "results/ml-eval/dataset/0007_00/front.stdout.txt",
-    "results/ml-eval/dataset/0007_00/script.log",
-    "results/ml-eval/dataset/0007_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0007_00/tamaraw.log",
-    "results/ml-eval/dataset/0007_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0007_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0007_01/control.log",
-    "results/ml-eval/dataset/0007_01/control.pcapng",
-    "results/ml-eval/dataset/0007_01/control.stdout.txt",
-    "results/ml-eval/dataset/0007_01/front-schedule.csv",
-    "results/ml-eval/dataset/0007_01/front.log",
-    "results/ml-eval/dataset/0007_01/front.pcapng",
-    "results/ml-eval/dataset/0007_01/front.stdout.txt",
-    "results/ml-eval/dataset/0007_01/script.log",
-    "results/ml-eval/dataset/0007_01/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0007_01/tamaraw.log",
-    "results/ml-eval/dataset/0007_01/tamaraw.pcapng",
-    "results/ml-eval/dataset/0007_01/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0007_02/control.log",
-    "results/ml-eval/dataset/0007_02/control.pcapng",
-    "results/ml-eval/dataset/0007_02/control.stdout.txt",
-    "results/ml-eval/dataset/0007_02/front-schedule.csv",
-    "results/ml-eval/dataset/0007_02/front.log",
-    "results/ml-eval/dataset/0007_02/front.pcapng",
-    "results/ml-eval/dataset/0007_02/front.stdout.txt",
-    "results/ml-eval/dataset/0007_02/script.log",
-    "results/ml-eval/dataset/0007_02/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0007_02/tamaraw.log",
-    "results/ml-eval/dataset/0007_02/tamaraw.pcapng",
-    "results/ml-eval/dataset/0007_02/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0008_00/control.log",
-    "results/ml-eval/dataset/0008_00/control.pcapng",
-    "results/ml-eval/dataset/0008_00/control.stdout.txt",
-    "results/ml-eval/dataset/0008_00/front-schedule.csv",
-    "results/ml-eval/dataset/0008_00/front.log",
-    "results/ml-eval/dataset/0008_00/front.pcapng",
-    "results/ml-eval/dataset/0008_00/front.stdout.txt",
-    "results/ml-eval/dataset/0008_00/script.log",
-    "results/ml-eval/dataset/0008_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0008_00/tamaraw.log",
-    "results/ml-eval/dataset/0008_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0008_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0008_01/control.log",
-    "results/ml-eval/dataset/0008_01/control.pcapng",
-    "results/ml-eval/dataset/0008_01/control.stdout.txt",
-    "results/ml-eval/dataset/0008_01/front-schedule.csv",
-    "results/ml-eval/dataset/0008_01/front.log",
-    "results/ml-eval/dataset/0008_01/front.pcapng",
-    "results/ml-eval/dataset/0008_01/front.stdout.txt",
-    "results/ml-eval/dataset/0008_01/script.log",
-    "results/ml-eval/dataset/0008_01/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0008_01/tamaraw.log",
-    "results/ml-eval/dataset/0008_01/tamaraw.pcapng",
-    "results/ml-eval/dataset/0008_01/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0008_02/control.log",
-    "results/ml-eval/dataset/0008_02/control.pcapng",
-    "results/ml-eval/dataset/0008_02/control.stdout.txt",
-    "results/ml-eval/dataset/0008_02/front-schedule.csv",
-    "results/ml-eval/dataset/0008_02/front.log",
-    "results/ml-eval/dataset/0008_02/front.pcapng",
-    "results/ml-eval/dataset/0008_02/front.stdout.txt",
-    "results/ml-eval/dataset/0008_02/script.log",
-    "results/ml-eval/dataset/0008_02/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0008_02/tamaraw.log",
-    "results/ml-eval/dataset/0008_02/tamaraw.pcapng",
-    "results/ml-eval/dataset/0008_02/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0009_00/control.log",
-    "results/ml-eval/dataset/0009_00/control.pcapng",
-    "results/ml-eval/dataset/0009_00/control.stdout.txt",
-    "results/ml-eval/dataset/0009_00/front-schedule.csv",
-    "results/ml-eval/dataset/0009_00/front.log",
-    "results/ml-eval/dataset/0009_00/front.pcapng",
-    "results/ml-eval/dataset/0009_00/front.stdout.txt",
-    "results/ml-eval/dataset/0009_00/script.log",
-    "results/ml-eval/dataset/0009_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0009_00/tamaraw.log",
-    "results/ml-eval/dataset/0009_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0009_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0009_01/control.log",
-    "results/ml-eval/dataset/0009_01/control.pcapng",
-    "results/ml-eval/dataset/0009_01/control.stdout.txt",
-    "results/ml-eval/dataset/0009_01/front-schedule.csv",
-    "results/ml-eval/dataset/0009_01/front.log",
-    "results/ml-eval/dataset/0009_01/front.pcapng",
-    "results/ml-eval/dataset/0009_01/front.stdout.txt",
-    "results/ml-eval/dataset/0009_01/script.log",
-    "results/ml-eval/dataset/0009_01/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0009_01/tamaraw.log",
-    "results/ml-eval/dataset/0009_01/tamaraw.pcapng",
-    "results/ml-eval/dataset/0009_01/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0009_02/control.log",
-    "results/ml-eval/dataset/0009_02/control.pcapng",
-    "results/ml-eval/dataset/0009_02/control.stdout.txt",
-    "results/ml-eval/dataset/0009_02/front-schedule.csv",
-    "results/ml-eval/dataset/0009_02/front.log",
-    "results/ml-eval/dataset/0009_02/front.pcapng",
-    "results/ml-eval/dataset/0009_02/front.stdout.txt",
-    "results/ml-eval/dataset/0009_02/script.log",
-    "results/ml-eval/dataset/0009_02/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0009_02/tamaraw.log",
-    "results/ml-eval/dataset/0009_02/tamaraw.pcapng",
-    "results/ml-eval/dataset/0009_02/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0010_00/control.log",
-    "results/ml-eval/dataset/0010_00/control.pcapng",
-    "results/ml-eval/dataset/0010_00/control.stdout.txt",
-    "results/ml-eval/dataset/0010_00/front-schedule.csv",
-    "results/ml-eval/dataset/0010_00/front.log",
-    "results/ml-eval/dataset/0010_00/front.pcapng",
-    "results/ml-eval/dataset/0010_00/front.stdout.txt",
-    "results/ml-eval/dataset/0010_00/script.log",
-    "results/ml-eval/dataset/0010_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0010_00/tamaraw.log",
-    "results/ml-eval/dataset/0010_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0010_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0010_01/control.log",
-    "results/ml-eval/dataset/0010_01/control.pcapng",
-    "results/ml-eval/dataset/0010_01/control.stdout.txt",
-    "results/ml-eval/dataset/0010_01/front-schedule.csv",
-    "results/ml-eval/dataset/0010_01/front.log",
-    "results/ml-eval/dataset/0010_01/front.pcapng",
-    "results/ml-eval/dataset/0010_01/front.stdout.txt",
-    "results/ml-eval/dataset/0010_01/script.log",
-    "results/ml-eval/dataset/0010_01/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0010_01/tamaraw.log",
-    "results/ml-eval/dataset/0010_01/tamaraw.pcapng",
-    "results/ml-eval/dataset/0010_01/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0010_02/control.log",
-    "results/ml-eval/dataset/0010_02/control.pcapng",
-    "results/ml-eval/dataset/0010_02/control.stdout.txt",
-    "results/ml-eval/dataset/0010_02/front-schedule.csv",
-    "results/ml-eval/dataset/0010_02/front.log",
-    "results/ml-eval/dataset/0010_02/front.pcapng",
-    "results/ml-eval/dataset/0010_02/front.stdout.txt",
-    "results/ml-eval/dataset/0010_02/script.log",
-    "results/ml-eval/dataset/0010_02/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0010_02/tamaraw.log",
-    "results/ml-eval/dataset/0010_02/tamaraw.pcapng",
-    "results/ml-eval/dataset/0010_02/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0011_00/control.log",
-    "results/ml-eval/dataset/0011_00/control.pcapng",
-    "results/ml-eval/dataset/0011_00/control.stdout.txt",
-    "results/ml-eval/dataset/0011_00/front-schedule.csv",
-    "results/ml-eval/dataset/0011_00/front.log",
-    "results/ml-eval/dataset/0011_00/front.pcapng",
-    "results/ml-eval/dataset/0011_00/front.stdout.txt",
-    "results/ml-eval/dataset/0011_00/script.log",
-    "results/ml-eval/dataset/0011_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0011_00/tamaraw.log",
-    "results/ml-eval/dataset/0011_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0011_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0011_01/control.log",
-    "results/ml-eval/dataset/0011_01/control.pcapng",
-    "results/ml-eval/dataset/0011_01/control.stdout.txt",
-    "results/ml-eval/dataset/0011_01/front-schedule.csv",
-    "results/ml-eval/dataset/0011_01/front.log",
-    "results/ml-eval/dataset/0011_01/front.pcapng",
-    "results/ml-eval/dataset/0011_01/front.stdout.txt",
-    "results/ml-eval/dataset/0011_01/script.log",
-    "results/ml-eval/dataset/0011_01/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0011_01/tamaraw.log",
-    "results/ml-eval/dataset/0011_01/tamaraw.pcapng",
-    "results/ml-eval/dataset/0011_01/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0011_02/control.log",
-    "results/ml-eval/dataset/0011_02/control.pcapng",
-    "results/ml-eval/dataset/0011_02/control.stdout.txt",
-    "results/ml-eval/dataset/0011_02/front-schedule.csv",
-    "results/ml-eval/dataset/0011_02/front.log",
-    "results/ml-eval/dataset/0011_02/front.pcapng",
-    "results/ml-eval/dataset/0011_02/front.stdout.txt",
-    "results/ml-eval/dataset/0011_02/script.log",
-    "results/ml-eval/dataset/0011_02/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0011_02/tamaraw.log",
-    "results/ml-eval/dataset/0011_02/tamaraw.pcapng",
-    "results/ml-eval/dataset/0011_02/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0012_00/control.log",
-    "results/ml-eval/dataset/0012_00/control.pcapng",
-    "results/ml-eval/dataset/0012_00/control.stdout.txt",
-    "results/ml-eval/dataset/0012_00/front-schedule.csv",
-    "results/ml-eval/dataset/0012_00/front.log",
-    "results/ml-eval/dataset/0012_00/front.pcapng",
-    "results/ml-eval/dataset/0012_00/front.stdout.txt",
-    "results/ml-eval/dataset/0012_00/script.log",
-    "results/ml-eval/dataset/0012_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0012_00/tamaraw.log",
-    "results/ml-eval/dataset/0012_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0012_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0013_00/control.log",
-    "results/ml-eval/dataset/0013_00/control.pcapng",
-    "results/ml-eval/dataset/0013_00/control.stdout.txt",
-    "results/ml-eval/dataset/0013_00/front-schedule.csv",
-    "results/ml-eval/dataset/0013_00/front.log",
-    "results/ml-eval/dataset/0013_00/front.pcapng",
-    "results/ml-eval/dataset/0013_00/front.stdout.txt",
-    "results/ml-eval/dataset/0013_00/script.log",
-    "results/ml-eval/dataset/0013_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0013_00/tamaraw.log",
-    "results/ml-eval/dataset/0013_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0013_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0014_00/control.log",
-    "results/ml-eval/dataset/0014_00/control.pcapng",
-    "results/ml-eval/dataset/0014_00/control.stdout.txt",
-    "results/ml-eval/dataset/0014_00/front-schedule.csv",
-    "results/ml-eval/dataset/0014_00/front.log",
-    "results/ml-eval/dataset/0014_00/front.pcapng",
-    "results/ml-eval/dataset/0014_00/front.stdout.txt",
-    "results/ml-eval/dataset/0014_00/script.log",
-    "results/ml-eval/dataset/0014_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0014_00/tamaraw.log",
-    "results/ml-eval/dataset/0014_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0014_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0015_00/control.log",
-    "results/ml-eval/dataset/0015_00/control.pcapng",
-    "results/ml-eval/dataset/0015_00/control.stdout.txt",
-    "results/ml-eval/dataset/0015_00/front-schedule.csv",
-    "results/ml-eval/dataset/0015_00/front.log",
-    "results/ml-eval/dataset/0015_00/front.pcapng",
-    "results/ml-eval/dataset/0015_00/front.stdout.txt",
-    "results/ml-eval/dataset/0015_00/script.log",
-    "results/ml-eval/dataset/0015_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0015_00/tamaraw.log",
-    "results/ml-eval/dataset/0015_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0015_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0016_00/control.log",
-    "results/ml-eval/dataset/0016_00/control.pcapng",
-    "results/ml-eval/dataset/0016_00/control.stdout.txt",
-    "results/ml-eval/dataset/0016_00/front-schedule.csv",
-    "results/ml-eval/dataset/0016_00/front.log",
-    "results/ml-eval/dataset/0016_00/front.pcapng",
-    "results/ml-eval/dataset/0016_00/front.stdout.txt",
-    "results/ml-eval/dataset/0016_00/script.log",
-    "results/ml-eval/dataset/0016_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0016_00/tamaraw.log",
-    "results/ml-eval/dataset/0016_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0016_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0017_00/control.log",
-    "results/ml-eval/dataset/0017_00/control.pcapng",
-    "results/ml-eval/dataset/0017_00/control.stdout.txt",
-    "results/ml-eval/dataset/0017_00/front-schedule.csv",
-    "results/ml-eval/dataset/0017_00/front.log",
-    "results/ml-eval/dataset/0017_00/front.pcapng",
-    "results/ml-eval/dataset/0017_00/front.stdout.txt",
-    "results/ml-eval/dataset/0017_00/script.log",
-    "results/ml-eval/dataset/0017_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0017_00/tamaraw.log",
-    "results/ml-eval/dataset/0017_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0017_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0018_00/control.log",
-    "results/ml-eval/dataset/0018_00/control.pcapng",
-    "results/ml-eval/dataset/0018_00/control.stdout.txt",
-    "results/ml-eval/dataset/0018_00/front-schedule.csv",
-    "results/ml-eval/dataset/0018_00/front.log",
-    "results/ml-eval/dataset/0018_00/front.pcapng",
-    "results/ml-eval/dataset/0018_00/front.stdout.txt",
-    "results/ml-eval/dataset/0018_00/script.log",
-    "results/ml-eval/dataset/0018_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0018_00/tamaraw.log",
-    "results/ml-eval/dataset/0018_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0018_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0019_00/control.log",
-    "results/ml-eval/dataset/0019_00/control.pcapng",
-    "results/ml-eval/dataset/0019_00/control.stdout.txt",
-    "results/ml-eval/dataset/0019_00/front-schedule.csv",
-    "results/ml-eval/dataset/0019_00/front.log",
-    "results/ml-eval/dataset/0019_00/front.pcapng",
-    "results/ml-eval/dataset/0019_00/front.stdout.txt",
-    "results/ml-eval/dataset/0019_00/script.log",
-    "results/ml-eval/dataset/0019_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0019_00/tamaraw.log",
-    "results/ml-eval/dataset/0019_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0019_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0020_00/control.log",
-    "results/ml-eval/dataset/0020_00/control.pcapng",
-    "results/ml-eval/dataset/0020_00/control.stdout.txt",
-    "results/ml-eval/dataset/0020_00/front-schedule.csv",
-    "results/ml-eval/dataset/0020_00/front.log",
-    "results/ml-eval/dataset/0020_00/front.pcapng",
-    "results/ml-eval/dataset/0020_00/front.stdout.txt",
-    "results/ml-eval/dataset/0020_00/script.log",
-    "results/ml-eval/dataset/0020_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0020_00/tamaraw.log",
-    "results/ml-eval/dataset/0020_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0020_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0021_00/control.log",
-    "results/ml-eval/dataset/0021_00/control.pcapng",
-    "results/ml-eval/dataset/0021_00/control.stdout.txt",
-    "results/ml-eval/dataset/0021_00/front-schedule.csv",
-    "results/ml-eval/dataset/0021_00/front.log",
-    "results/ml-eval/dataset/0021_00/front.pcapng",
-    "results/ml-eval/dataset/0021_00/front.stdout.txt",
-    "results/ml-eval/dataset/0021_00/script.log",
-    "results/ml-eval/dataset/0021_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0021_00/tamaraw.log",
-    "results/ml-eval/dataset/0021_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0021_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0022_00/control.log",
-    "results/ml-eval/dataset/0022_00/control.pcapng",
-    "results/ml-eval/dataset/0022_00/control.stdout.txt",
-    "results/ml-eval/dataset/0022_00/front-schedule.csv",
-    "results/ml-eval/dataset/0022_00/front.log",
-    "results/ml-eval/dataset/0022_00/front.pcapng",
-    "results/ml-eval/dataset/0022_00/front.stdout.txt",
-    "results/ml-eval/dataset/0022_00/script.log",
-    "results/ml-eval/dataset/0022_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0022_00/tamaraw.log",
-    "results/ml-eval/dataset/0022_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0022_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0023_00/control.log",
-    "results/ml-eval/dataset/0023_00/control.pcapng",
-    "results/ml-eval/dataset/0023_00/control.stdout.txt",
-    "results/ml-eval/dataset/0023_00/front-schedule.csv",
-    "results/ml-eval/dataset/0023_00/front.log",
-    "results/ml-eval/dataset/0023_00/front.pcapng",
-    "results/ml-eval/dataset/0023_00/front.stdout.txt",
-    "results/ml-eval/dataset/0023_00/script.log",
-    "results/ml-eval/dataset/0023_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0023_00/tamaraw.log",
-    "results/ml-eval/dataset/0023_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0023_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0024_00/control.log",
-    "results/ml-eval/dataset/0024_00/control.pcapng",
-    "results/ml-eval/dataset/0024_00/control.stdout.txt",
-    "results/ml-eval/dataset/0024_00/front-schedule.csv",
-    "results/ml-eval/dataset/0024_00/front.log",
-    "results/ml-eval/dataset/0024_00/front.pcapng",
-    "results/ml-eval/dataset/0024_00/front.stdout.txt",
-    "results/ml-eval/dataset/0024_00/script.log",
-    "results/ml-eval/dataset/0024_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0024_00/tamaraw.log",
-    "results/ml-eval/dataset/0024_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0024_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0025_00/control.log",
-    "results/ml-eval/dataset/0025_00/control.pcapng",
-    "results/ml-eval/dataset/0025_00/control.stdout.txt",
-    "results/ml-eval/dataset/0025_00/front-schedule.csv",
-    "results/ml-eval/dataset/0025_00/front.log",
-    "results/ml-eval/dataset/0025_00/front.pcapng",
-    "results/ml-eval/dataset/0025_00/front.stdout.txt",
-    "results/ml-eval/dataset/0025_00/script.log",
-    "results/ml-eval/dataset/0025_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0025_00/tamaraw.log",
-    "results/ml-eval/dataset/0025_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0025_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0026_00/control.log",
-    "results/ml-eval/dataset/0026_00/control.pcapng",
-    "results/ml-eval/dataset/0026_00/control.stdout.txt",
-    "results/ml-eval/dataset/0026_00/front-schedule.csv",
-    "results/ml-eval/dataset/0026_00/front.log",
-    "results/ml-eval/dataset/0026_00/front.pcapng",
-    "results/ml-eval/dataset/0026_00/front.stdout.txt",
-    "results/ml-eval/dataset/0026_00/script.log",
-    "results/ml-eval/dataset/0026_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0026_00/tamaraw.log",
-    "results/ml-eval/dataset/0026_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0026_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0027_00/control.log",
-    "results/ml-eval/dataset/0027_00/control.pcapng",
-    "results/ml-eval/dataset/0027_00/control.stdout.txt",
-    "results/ml-eval/dataset/0027_00/front-schedule.csv",
-    "results/ml-eval/dataset/0027_00/front.log",
-    "results/ml-eval/dataset/0027_00/front.pcapng",
-    "results/ml-eval/dataset/0027_00/front.stdout.txt",
-    "results/ml-eval/dataset/0027_00/script.log",
-    "results/ml-eval/dataset/0027_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0027_00/tamaraw.log",
-    "results/ml-eval/dataset/0027_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0027_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0028_00/control.log",
-    "results/ml-eval/dataset/0028_00/control.pcapng",
-    "results/ml-eval/dataset/0028_00/control.stdout.txt",
-    "results/ml-eval/dataset/0028_00/front-schedule.csv",
-    "results/ml-eval/dataset/0028_00/front.log",
-    "results/ml-eval/dataset/0028_00/front.pcapng",
-    "results/ml-eval/dataset/0028_00/front.stdout.txt",
-    "results/ml-eval/dataset/0028_00/script.log",
-    "results/ml-eval/dataset/0028_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0028_00/tamaraw.log",
-    "results/ml-eval/dataset/0028_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0028_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0029_00/control.log",
-    "results/ml-eval/dataset/0029_00/control.pcapng",
-    "results/ml-eval/dataset/0029_00/control.stdout.txt",
-    "results/ml-eval/dataset/0029_00/front-schedule.csv",
-    "results/ml-eval/dataset/0029_00/front.log",
-    "results/ml-eval/dataset/0029_00/front.pcapng",
-    "results/ml-eval/dataset/0029_00/front.stdout.txt",
-    "results/ml-eval/dataset/0029_00/script.log",
-    "results/ml-eval/dataset/0029_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0029_00/tamaraw.log",
-    "results/ml-eval/dataset/0029_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0029_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0030_00/control.log",
-    "results/ml-eval/dataset/0030_00/control.pcapng",
-    "results/ml-eval/dataset/0030_00/control.stdout.txt",
-    "results/ml-eval/dataset/0030_00/front-schedule.csv",
-    "results/ml-eval/dataset/0030_00/front.log",
-    "results/ml-eval/dataset/0030_00/front.pcapng",
-    "results/ml-eval/dataset/0030_00/front.stdout.txt",
-    "results/ml-eval/dataset/0030_00/script.log",
-    "results/ml-eval/dataset/0030_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0030_00/tamaraw.log",
-    "results/ml-eval/dataset/0030_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0030_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0031_00/control.log",
-    "results/ml-eval/dataset/0031_00/control.pcapng",
-    "results/ml-eval/dataset/0031_00/control.stdout.txt",
-    "results/ml-eval/dataset/0031_00/front-schedule.csv",
-    "results/ml-eval/dataset/0031_00/front.log",
-    "results/ml-eval/dataset/0031_00/front.pcapng",
-    "results/ml-eval/dataset/0031_00/front.stdout.txt",
-    "results/ml-eval/dataset/0031_00/script.log",
-    "results/ml-eval/dataset/0031_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0031_00/tamaraw.log",
-    "results/ml-eval/dataset/0031_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0031_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0032_00/control.log",
-    "results/ml-eval/dataset/0032_00/control.pcapng",
-    "results/ml-eval/dataset/0032_00/control.stdout.txt",
-    "results/ml-eval/dataset/0032_00/front-schedule.csv",
-    "results/ml-eval/dataset/0032_00/front.log",
-    "results/ml-eval/dataset/0032_00/front.pcapng",
-    "results/ml-eval/dataset/0032_00/front.stdout.txt",
-    "results/ml-eval/dataset/0032_00/script.log",
-    "results/ml-eval/dataset/0032_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0032_00/tamaraw.log",
-    "results/ml-eval/dataset/0032_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0032_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0033_00/control.log",
-    "results/ml-eval/dataset/0033_00/control.pcapng",
-    "results/ml-eval/dataset/0033_00/control.stdout.txt",
-    "results/ml-eval/dataset/0033_00/front-schedule.csv",
-    "results/ml-eval/dataset/0033_00/front.log",
-    "results/ml-eval/dataset/0033_00/front.pcapng",
-    "results/ml-eval/dataset/0033_00/front.stdout.txt",
-    "results/ml-eval/dataset/0033_00/script.log",
-    "results/ml-eval/dataset/0033_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0033_00/tamaraw.log",
-    "results/ml-eval/dataset/0033_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0033_00/tamaraw.stdout.txt",
-    "results/ml-eval/dataset/0034_00/control.log",
-    "results/ml-eval/dataset/0034_00/control.pcapng",
-    "results/ml-eval/dataset/0034_00/control.stdout.txt",
-    "results/ml-eval/dataset/0034_00/front-schedule.csv",
-    "results/ml-eval/dataset/0034_00/front.log",
-    "results/ml-eval/dataset/0034_00/front.pcapng",
-    "results/ml-eval/dataset/0034_00/front.stdout.txt",
-    "results/ml-eval/dataset/0034_00/script.log",
-    "results/ml-eval/dataset/0034_00/tamaraw-schedule.csv",
-    "results/ml-eval/dataset/0034_00/tamaraw.log",
-    "results/ml-eval/dataset/0034_00/tamaraw.pcapng",
-    "results/ml-eval/dataset/0034_00/tamaraw.stdout.txt",
-]
+def _count_samples(
+    directories,
+    defence,
+    n_samples: int,
+    n_instances: int,
+):
+    _LOGGER.info("Counting the number of successes...")
+    counts: Dict[int, int] = {}
+    for directory in directories:
+        stdout = directory/f"{defence}.stdout.txt"
+        sample_id, _ = map(int, str(directory.name).split("_"))
+        if (
+            neqo.is_run_successful(directory/"control.stdout.txt")
+            and neqo.is_run_almost_successful(stdout, 10)
+        ):
+            counts[sample_id] = counts.get(sample_id, 0) + 1
+
+    n_sufficient = sum(1 for count in counts.values() if count >= n_instances)
+    _LOGGER.info(
+        "Sample ids with more than %d instances: %d", n_instances, n_sufficient
+    )
+
+    if n_sufficient < n_samples:
+        insufficient = {
+            sample_id: (n_instances - counts[sample_id]) for sample_id in counts
+            if counts[sample_id] < n_instances
+        }
+        raise InsufficientSamplesError(f"Need more samples: {insufficient}")
+
+    sufficient_sample_ids = sorted(
+        [id_ for id_, count in counts.items() if count >= n_instances]
+    )
+    return set(sufficient_sample_ids[:n_samples])
+
+
+def _extract_sample(directory, defence: str, simulate: bool):
+    stdout = directory/f"{defence}.stdout.txt"
+    sample_id, rep_id = map(int, str(directory.name).split("_"))
+
+    if (
+        not neqo.is_run_successful(directory/"control.stdout.txt")
+        or not neqo.is_run_almost_successful(stdout, 10)
+    ):
+        sample_trace = None
+    elif not simulate:
+        sample_trace = trace.from_pcap(directory/f"{defence}.pcapng")
+    else:
+        control = trace.from_pcap(directory/"control.pcapng")
+        schedule = trace.from_csv(directory/f"{defence}-schedule.csv")
+
+        if defence == "front":
+            sample_trace = front.simulate(control, schedule)
+        else:
+            raise ValueError(f"Unknown defence {defence!r}")
+
+    return (sample_id, rep_id, sample_trace)
+
 
 if __name__ == "__main__":
-    main(file_list, "/tmp/test.hdf", defence="front", simulate=True,
-         n_samples=10, n_instances=3)
+    snakemake = globals().get("snakemake", None)
+    main(
+        input_=list(snakemake.input),
+        output=str(snakemake.output[0]),
+        setting=snakemake.params["setting"],
+        defence=snakemake.params["defence"],
+        simulate=snakemake.params["simulate"],
+        config=dict(snakemake.config),
+    )

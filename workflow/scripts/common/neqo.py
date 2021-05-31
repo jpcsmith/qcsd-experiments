@@ -23,13 +23,14 @@ def run(
     stdout=None,
     stderr=None,
     env=None,
+    tcpdump_kw=None,
 ) -> bool:
     """Run neqo-client while capturing the traffic.
 
     Return True iff the capture was a success.
     """
     with NamedTemporaryFile(mode="r") as keylog:
-        with tcpdump(capture_filter="udp") as sniffer:
+        with tcpdump(capture_filter="udp", **(tcpdump_kw or {})) as sniffer:
             (output, is_success) = _run_neqo(
                 neqo_args, keylog_file=keylog.name, ignore_errors=ignore_errors,
                 stdout=stdout, stderr=stderr, env=env,
@@ -48,7 +49,14 @@ def run(
 
 def is_run_successful(stdout_file: Union[str, Path]) -> bool:
     """Return true if the output of neqo run indicates a success."""
+    stdout_file = Path(stdout_file)
+
     # We check for the tag ">>> SUCCESS <<<" at the end of the file
+    # Read the entire file if it's small
+    if stdout_file.stat().st_size <= 1024:
+        return b">>> SUCCESS <<<" in stdout_file.read_bytes()
+
+    # Otherwise, seek to the end of the file and check only that
     with open(stdout_file, mode="rb") as file_:
         file_.seek(-30, os.SEEK_END)
         return b">>> SUCCESS <<<" in file_.read()
@@ -135,7 +143,8 @@ def _embed_tls_keys(pcap_bytes: bytes, keylog_file: str) -> bytes:
     secrets.
     """
     with open(keylog_file, "r") as keylog:
-        assert len(keylog.read().strip()) > 0
+        if len(keylog.read().strip()) == 0:
+            _LOGGER.warning("Keylog file is empty.")
 
     result = subprocess.run([
         "editcap",

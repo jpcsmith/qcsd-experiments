@@ -1,8 +1,10 @@
 import random
+from pathlib import Path
+
 
 #: Specify constraints on the wildcards
 wildcard_constraints:
-    sample_id="\d{4}",
+    sample_id="\d{4,6}",
     rep_id="\d{2}",
     excess_msd="\d+",
 
@@ -74,7 +76,7 @@ rule excess_msd__all_score:
         "results/excess-msd/scores.csv"
     run:
         pd.concat(
-            [pd.read_csv(f) for f in input], ignore_index=True
+            [pd.read_csv(f) for f in input if Path(f).stat().st_size != 0], ignore_index=True
         ).to_csv(output[0], index=False)
 
 

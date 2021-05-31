@@ -1,50 +1,46 @@
 """Calculate padding-only scores.
 """
+import pathlib
 import logging
 import itertools
 
-import fastdtw
-import pyinform
+from fastdtw import fastdtw
+# import pyinform
 import numpy as np
 import pandas as pd
 from scipy.stats import pearsonr
-from scipy.spatial.distance import euclidean, cosine
+from scipy.spatial.distance import euclidean  # , cosine
 
 import common
 from common import timeseries, neqo
 
 _LOGGER = logging.getLogger(__name__)
-COLUMNS = ["sample", "rate", "dir", "pearsonr", "euclidean", "dtw",
-           "cosine", "mutual_info"]
+COLUMNS = [
+    "sample", "rate", "dir", "pearsonr", "euclidean", "dtw",
+    "cosine", "mutual_info", "scaled_euclidean", "scaled_dtw",
+]
 
 
 def main(
-    input_, output, *, sample_id, pad_only: bool, ts_offset, resample_rates
+    input_, output, *, sample_id, pad_only: bool, ts_offset, resample_rates,
+    filter_below=0,
 ):
     """Score how close a padding-only defended time series is to
     padding schedule.
-
-    Params:
-        input_["schedule"]: The filename of the CSV schedule
-        input_["defence"]: The filename of the CSV details of the defence
-            trace.
-        output[0]: The file to write the resulting scores CSV
-        ts_offset["min"], ts_offset["max"], ts_offset["inc"]:
-            Range definition of the offsets to shift the defended
-            timeseries by when comparing it to the schedule.
-        resample_rates: List of frequencies, e.g, 5ms, 10ms, etc.,
-            defining the rates to resample the timeseries at when
-            when calculating the scores.
     """
     common.init_logging()
+    _LOGGER.info("Using parameters: %s", locals())
 
     if (
         not neqo.is_run_successful(input_["control"])
-        or not neqo.is_run_successful(input_["defended"])
+        or not neqo.is_run_almost_successful(input_["defended"], 10)
     ):
         _LOGGER.info("Skipping as run was unsuccessful")
-        (pd.DataFrame([[sample_id, "", ""] + [np.NaN] * 5], columns=COLUMNS)
-         .to_csv(output[0], index=False))
+        pd.DataFrame.from_records([{
+            "sample": sample_id, "rate": "", "dir": "",
+            "pearsonr": np.NaN, "scaled_euclidean": np.NaN,
+            "scaled_dtw": np.NaN,
+        }]).to_csv(output[0], index=False)
         return
 
     schedule_ts = timeseries.from_csv(input_["schedule"])
@@ -59,32 +55,50 @@ def main(
     results = []
     for rate, direction in itertools.product(resample_rates, ("in", "out")):
         series = pd.DataFrame({
-            "a": timeseries.resample(defended_ts[direction], rate),
-            "b": timeseries.resample(simulated_ts[direction], rate),
+            "a": timeseries.resample(
+                _filter(defended_ts[direction], filter_below), rate
+            ),
+            "b": timeseries.resample(
+                _filter(simulated_ts[direction], filter_below), rate
+            ),
+            "c": timeseries.resample(
+                _filter(control_ts[direction], filter_below), rate
+            ),
         }).fillna(0)
-        _LOGGER.info("Series length at rate %s: %d", rate, len(series))
-        _LOGGER.info("Series summary at rate %s: %s", rate, series.describe())
+        _LOGGER.debug("Series length at rate %s: %d", rate, len(series))
+        _LOGGER.debug("Series summary at rate %s: %s", rate, series.describe())
 
-        try:
-            mutual_info = pyinform.mutualinfo.mutual_info(
-                series["a"], series["b"]
-            )
-        except pyinform.error.InformError as err:
-            mutual_info = np.NaN
-            _LOGGER.error("Unable to compute mutalinfo: %s", err)
+        # "sample", "rate", "dir", "pearsonr", "euclidean", "dtw",
+        # "cosine", "mutual_info", "scaled_euclidean", "scaled_dtw",
+        # try:
+        #     mutual_info = pyinform.mutualinfo.mutual_info(
+        #         series["a"], series["b"]
+        #     )
+        # except pyinform.error.InformError as err:
+        #     mutual_info = np.NaN
+        #     _LOGGER.error("Unable to compute mutual info: %s", err)
 
-        results.append([
-            sample_id,  # Sample name
-            rate,
-            direction,
-            pearsonr(series["a"], series["b"])[0],
-            euclidean(series["a"], series["b"]),
-            fastdtw.fastdtw(series["a"], series["b"])[0],
-            cosine(series["a"], series["b"]),
-            mutual_info,
-        ])
+        results.append({
+            "sample": sample_id,  # Sample name
+            "rate": rate,
+            "dir": direction,
+            "pearsonr": pearsonr(series["a"], series["b"])[0],
+            # euclidean(series["a"], series["b"]),
+            # fastdtw.fastdtw(series["a"], series["b"])[0],
+            # cosine(series["a"], series["b"]),
+            # mutual_info,
+            "scaled_euclidean": (euclidean(series["a"], series["b"])
+                                 / euclidean(series["b"], series["c"])),
+            "scaled_dtw": (fastdtw(series["a"], series["b"])[0]
+                           / fastdtw(series["b"], series["c"])[0]),
+        })
 
-    pd.DataFrame(results, columns=COLUMNS).to_csv(output[0], index=False)
+    pd.DataFrame.from_records(results).to_csv(output[0], index=False)
+
+
+def _filter(column, below):
+    assert column.min() >= 0
+    return column[column >= below]
 
 
 def simulate_with_lag(

@@ -9,14 +9,14 @@ quic_versions: ["h3-29"]
 frequent_slds: ["blogspot.com", "appspot.com", "myshopify.com", "withgoogle.com", "translate.goog"]
 
 # The log level passed to RUST_LOG for the neqo-client
-neqo_log_level: "neqo=info"
+neqo_log_level: "neqo-transport=info"
 
 # The User-Agent to use for collections
 user_agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36"
 
 url_deps:
   batch_size: 100
-  n_batches: 120
+  n_batches: 140
 
 defaults:
   front_config: &front-default
@@ -39,6 +39,9 @@ experiment:
     max_samples: 1000
     padding: { rate: 1, duration: 10, interval: 5 }  # Mbps, seconds, milliseconds
     excess_values: [ 16, 350, 700, 1000, 2000 ]
+  # NOTE: The single_eval *_configs are also used in the delay-vs-drop experiment
+  delay_vs_drop:
+    max_samples: 100
   front_single_eval:
     max_samples: 1000
     front_config: *front-default
@@ -46,9 +49,8 @@ experiment:
     max_samples: 1000
     tamaraw_config: *tamaraw-default
   ml_eval:
-    n_monitored: 100
-    n_per_monitored_inst: 100
-    n_unmonitored: 10_000
-    collect_extra: 0.15
+    monitored: { samples: 100, instances: 100, extra: 0.6 }
+    unmonitored: { samples: 10_000, instances: 1, extra: 0.25 }
+    snaplen: 96
     front_config: *front-default
     tamaraw_config: *tamaraw-default

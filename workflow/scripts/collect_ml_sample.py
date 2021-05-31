@@ -49,6 +49,7 @@ def main(input_, output, log, params, config):
         pcap_file=output["control_pcap"],
         env={"CSDEF_NO_SHAPING": "True", "RUST_LOG": config["neqo_log_level"]},
         ignore_errors=True,
+        tcpdump_kw=dict(snaplen=ml_eval["snaplen"]),
     ):
         _exit_gracefully("control collection failed", output)
 
@@ -69,6 +70,7 @@ def main(input_, output, log, params, config):
         pcap_file=output["tamaraw_pcap"],
         env={"RUST_LOG": config["neqo_log_level"]},
         ignore_errors=True,
+        tcpdump_kw=dict(snaplen=ml_eval["snaplen"]),
     ):
         _exit_gracefully("Tamaraw collection failed", output)
 
@@ -95,6 +97,7 @@ def main(input_, output, log, params, config):
         pcap_file=output["front_pcap"],
         env={"RUST_LOG": config["neqo_log_level"]},
         ignore_errors=True,
+        tcpdump_kw=dict(snaplen=ml_eval["snaplen"]),
     ):
         _exit_gracefully("FRONT collection failed", output)
 
