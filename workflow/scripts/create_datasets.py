@@ -1,4 +1,7 @@
+"""Create a HDF5 dataset with the tables /labels, /sizes and /timestamps.
+"""
 import logging
+import threading
 from pathlib import Path
 from typing import Dict, List
 from concurrent.futures import ThreadPoolExecutor
@@ -19,75 +22,81 @@ class InsufficientSamplesError(Exception):
 
 
 def main(
-    input_: List[str],
+    input_: Dict[str, List[str]],
     output: str,
     defence: str,
-    setting: str,
     simulate: bool,
     config: Dict,
 ):
-    common.init_logging()
+    """Create the dataset.
 
-    n_samples = config["experiment"]["ml_eval"][setting]["samples"]
-    assert n_samples >= 1, "must be at least 1 sample required"
-    n_instances = config["experiment"]["ml_eval"][setting]["instances"]
-    assert n_instances >= 1, "must be at least 1 instance per sample"
+    When simulate is True, use the simulated control trace as opposed to
+    the actual defended trace.
+    """
+    common.init_logging()
     assert isinstance(simulate, bool), "simulate not boolean?"
 
-    directories = np.unique(list(Path(f).parent for f in input_))
-    _LOGGER.info("Processing %d directories of %d files.", len(directories),
-                 len(input_))
+    ml_eval = config["experiment"]["ml_eval"]
+    paths = {}
 
-    # Counts of sample ids and the number of instances found
-    counts: Dict[int, int] = dict()
+    n_total_samples = 0
+    for setting in ["monitored", "unmonitored"]:
+        dirs = np.unique(list(Path(f).parent for f in input_[setting]))
+        _LOGGER.info("%d %s directories on %d files.", len(dirs), setting,
+                     len(input_[setting]))
 
-    with h5py.File(output, mode="w") as hdf, ThreadPoolExecutor() as executor:
+        n_samples = ml_eval[setting]["samples"]
+        n_instances = ml_eval[setting]["instances"]
+        assert setting != "unmonitored" or n_instances == 1
+
+        paths[setting] = _select_samples(dirs, defence, n_samples, n_instances)
+        n_total_samples += (n_samples * n_instances)
+
+    with h5py.File(output, mode="w") as hdf:
         for (key, dtype) in [
-            ("/labels", np.dtype([("sample", "i4"), ("rep", "i4")])),
+            ("/labels", np.dtype([("class", "i4")])),
             ("/sizes", h5py.vlen_dtype(np.dtype("i4"))),
             ("/timestamps", h5py.vlen_dtype(np.dtype(float))),
         ]:
-            hdf.create_dataset(key, dtype=dtype, shape=(n_samples*n_instances,))
+            hdf.create_dataset(key, dtype=dtype, shape=(n_total_samples, ))
         _LOGGER.info("Initialised HDF5 file at: %r", output)
 
-        selected = _count_samples(directories, defence, n_samples, n_instances)
+        with ThreadPoolExecutor() as executor:
+            lock = threading.Lock()
 
-        index = 0
-        for (sample_id, rep_id, sample_trace) in executor.map(
-            lambda directory: _extract_sample(directory, defence, simulate),
-            directories
-        ):
-            case_id = f"{sample_id}_{rep_id}"
+            row_id = 0
+            for class_, rep_dirs in enumerate(paths["monitored"].values()):
+                for directory in rep_dirs:
+                    executor.submit(
+                        _extract_sample, directory, defence, simulate,
+                        class_=class_, hdf_details=(hdf, row_id, lock)
+                    )
+                    row_id += 1
+            _LOGGER.info("Generated monitored jobs.")
 
-            if sample_trace is None:
-                _LOGGER.debug("Skipping due to failure: %s", case_id)
-            elif sample_id not in selected:
-                _LOGGER.debug("Skipping due to unselected: %s", case_id)
-            elif counts.get(sample_id, 0) == n_instances:
-                _LOGGER.debug("Skipping due to enough instances: %s", case_id)
-            else:
-                hdf["/labels"][index] = (sample_id, rep_id)
-                hdf["/sizes"][index] = sample_trace["size"]
-                hdf["/timestamps"][index] = sample_trace["time"]
+            for rep_dirs in paths["unmonitored"].values():
+                assert len(rep_dirs) == 1, "only 1-sample per unmon supported"
+                executor.submit(
+                    _extract_sample, rep_dirs[0], defence, simulate,
+                    class_=-1, hdf_details=(hdf, row_id, lock)
+                )
+                row_id += 1
+            _LOGGER.info("Generated unmonitored jobs.")
 
-                counts[sample_id] = counts.get(sample_id, 0) + 1
-                index += 1
-
-                if index in np.linspace(0, 10000, 10, dtype=int):
-                    complete = index * 100 / (n_samples * n_instances)
-                    _LOGGER.info("Progress: %f%% complete", complete)
-
-        _LOGGER.info("Done iterating through %d files.", sum(counts.values()))
+            del paths  # Allow the GC to cleanup the massive lists of paths
+            _LOGGER.info("Waiting for all thread tasks to complete...")
+    _LOGGER.info("Completed creating the dataset.")
 
 
-def _count_samples(
+def _select_samples(
     directories,
     defence,
     n_samples: int,
     n_instances: int,
 ):
     _LOGGER.info("Counting the number of successes...")
-    counts: Dict[int, int] = {}
+
+    samples: Dict[int, List[str]] = {}
     for directory in directories:
         stdout = directory/f"{defence}.stdout.txt"
         sample_id, _ = map(int, str(directory.name).split("_"))
@@ -95,36 +104,32 @@ def _count_samples(
             neqo.is_run_successful(directory/"control.stdout.txt")
             and neqo.is_run_almost_successful(stdout, 10)
         ):
-            counts[sample_id] = counts.get(sample_id, 0) + 1
+            samples.setdefault(sample_id, []).append(directory)
 
-    n_sufficient = sum(1 for count in counts.values() if count >= n_instances)
+    n_sufficient = sum(
+        len(rep_dirs) >= n_instances for rep_dirs in samples.values()
+    )
     _LOGGER.info(
         "Sample ids with more than %d instances: %d", n_instances, n_sufficient
     )
 
     if n_sufficient < n_samples:
         insufficient = {
-            sample_id: (n_instances - counts[sample_id]) for sample_id in counts
-            if counts[sample_id] < n_instances
+            sample_id: (n_instances - len(reps))
+            for sample_id, reps in samples.items() if len(reps) < n_instances
         }
         raise InsufficientSamplesError(f"Need more samples: {insufficient}")
 
-    sufficient_sample_ids = sorted(
-        [id_ for id_, count in counts.items() if count >= n_instances]
+    selected_samples = sorted(
+        [id_ for id_, reps in samples.items() if len(reps) >= n_instances]
     )
-    return set(sufficient_sample_ids[:n_samples])
+    return {id_: sorted(samples[id_][:n_instances]) for id_ in selected_samples}
 
 
-def _extract_sample(directory, defence: str, simulate: bool):
-    stdout = directory/f"{defence}.stdout.txt"
-    sample_id, rep_id = map(int, str(directory.name).split("_"))
-
-    if (
-        not neqo.is_run_successful(directory/"control.stdout.txt")
-        or not neqo.is_run_almost_successful(stdout, 10)
-    ):
-        sample_trace = None
-    elif not simulate:
+def _extract_sample(
+    directory, defence: str, simulate: bool, class_: int, hdf_details
+):
+    if not simulate:
         sample_trace = trace.from_pcap(directory/f"{defence}.pcapng")
     else:
         control = trace.from_pcap(directory/"control.pcapng")
@@ -135,15 +140,18 @@ def _extract_sample(directory, defence: str, simulate: bool):
         else:
             raise ValueError(f"Unknown defence {defence!r}")
 
-    return (sample_id, rep_id, sample_trace)
+    hdf, row_id, hdf_lock = hdf_details
+    with hdf_lock:
+        hdf["/labels"][row_id] = (class_, )
+        hdf["/sizes"][row_id] = sample_trace["size"]
+        hdf["/timestamps"][row_id] = sample_trace["time"]
 
 
 if __name__ == "__main__":
     snakemake = globals().get("snakemake", None)
     main(
-        input_=list(snakemake.input),
+        input_=dict(snakemake.input),
         output=str(snakemake.output[0]),
-        setting=snakemake.params["setting"],
         defence=snakemake.params["defence"],
         simulate=snakemake.params["simulate"],
         config=dict(snakemake.config),

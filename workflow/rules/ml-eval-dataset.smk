@@ -49,25 +49,28 @@ def ml_eval__dataset__inputs(wildcards):
         f"not enough urls for dataset, reqiured: {n_required}, available: {len(sample_ids)}"
     )
 
-    rep_ids = [f"{i:02d}" for i in range(ml_eval[wildcards["setting"]]["instances"])]
-    if wildcards["setting"] == "monitored":
-        return expand(
-            rules.ml_eval__collect.output, sample_id=sample_ids[:n_mon_collect],
-            rep_id=rep_ids,
-        )
-    return expand(
+    inputs_ = {}
+    rep_ids = [f"{i:02d}" for i in range(ml_eval["monitored"]["instances"])]
+    inputs_["monitored"] = expand(
+        rules.ml_eval__collect.output, sample_id=sample_ids[:n_mon_collect],
+        rep_id=rep_ids,
+    )
+
+    rep_ids = [f"{i:02d}" for i in range(ml_eval["unmonitored"]["instances"])]
+    inputs_["unmonitored"] = expand(
         rules.ml_eval__collect.output, rep_id=rep_ids,
         sample_id=sample_ids[n_mon_collect:(n_mon_collect + n_unmon_collect)],
     )
 
+    return inputs_
+
 
 rule ml_eval__dataset:
     input:
-        ml_eval__dataset__inputs
+        unpack(ml_eval__dataset__inputs)
     output:
-        "results/ml-eval/{setting}-{defence}.h5",
+        "results/ml-eval/{defence}-dataset.h5",
     params:
-        setting="{setting}",
         defence="{defence}",
         simulate=False,
     threads: 16
@@ -75,13 +78,12 @@ rule ml_eval__dataset:
         "../scripts/create_datasets.py"
 
 
-rule ml_eval__simulated_dataset:
+rule ml_eval__dataset:
     input:
-        ml_eval__dataset__inputs
+        unpack(ml_eval__dataset__inputs)
     output:
-        "results/ml-eval/{setting}-sim-{defence}.h5",
+        "results/ml-eval/sim-{defence}-dataset.h5",
     params:
-        setting="{setting}",
         defence="{defence}",
         simulate=True,
     threads: 16

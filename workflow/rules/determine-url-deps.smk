@@ -1,9 +1,9 @@
 rule depfetch_browser_image:
     """Build the browser image for determining URL dependencies."""
     input:
-        "resources/docker/dep-fetch/Dockerfile",
-        "resources/docker/dep-fetch/fetch-script",
-        "resources/docker/dep-fetch/requirements.txt"
+        ancient("resources/docker/dep-fetch/Dockerfile"),
+        ancient("resources/docker/dep-fetch/fetch-script"),
+        ancient("resources/docker/dep-fetch/requirements.txt")
     output:
         touch("results/determine-url-deps/.dep-fetch-build.done")
     shell: "docker build --tag dep-fetch resources/docker/dep-fetch/"
