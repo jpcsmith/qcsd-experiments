@@ -54,3 +54,8 @@ experiment:
     snaplen: 96
     front_config: *front-default
     tamaraw_config: *tamaraw-default
+    min_packet_size: 100
+    splits:
+      n_folds: 10
+      seed: 437
+      validation_size: 0.1

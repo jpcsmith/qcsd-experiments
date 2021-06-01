@@ -78,7 +78,7 @@ rule ml_eval__dataset:
         "../scripts/create_datasets.py"
 
 
-rule ml_eval__dataset:
+rule ml_eval__simulated_dataset:
     input:
         unpack(ml_eval__dataset__inputs)
     output:
@@ -89,3 +89,16 @@ rule ml_eval__dataset:
     threads: 16
     script:
         "../scripts/create_datasets.py"
+
+
+rule ml_eval__filtered_dataset:
+    """Remove packets below the configured threshold from the monitored and
+    unmonitored traces."""
+    input:
+        "results/ml-eval/{filename}.h5"
+    output:
+        "results/ml-eval/{filename}-filtered.h5"
+    params:
+        size=config["experiment"]["ml_eval"]["min_packet_size"]
+    shell:
+        "workflow/scripts/remove-small-packets {params.size} {input} {output}"
