@@ -137,6 +137,8 @@ def _extract_sample(
 
         if defence == "front":
             sample_trace = front.simulate(control, schedule)
+        elif defence == "tamaraw":
+            sample_trace = schedule
         else:
             raise ValueError(f"Unknown defence {defence!r}")
 

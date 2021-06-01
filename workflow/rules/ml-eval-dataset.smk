@@ -1,8 +1,5 @@
-wildcard_constraints:
-    setting="monitored|unmonitored"
-
-
 rule ml_eval__collect:
+    """Collect control, FRONT-defended, and Tamaraw-defended PCAPs."""
     input:
         url_dep="results/determine-url-deps/dependencies/{sample_id}.json"
     output:
@@ -31,6 +28,7 @@ rule ml_eval__collect:
 
 
 def ml_eval__dataset__inputs(wildcards):
+    """Input function to select samples for the monitored and unmonitored datasets."""
     ml_eval = config["experiment"]["ml_eval"]
 
     # Get the sample ids for which we have dependency graphs
@@ -66,26 +64,18 @@ def ml_eval__dataset__inputs(wildcards):
 
 
 rule ml_eval__dataset:
+    """Combine the samples into an HDF5 dataset."""
     input:
         unpack(ml_eval__dataset__inputs)
     output:
-        "results/ml-eval/{defence}-dataset.h5",
+        "results/ml-eval/{sim_prefix}{defence}-dataset.h5",
+    log:
+        "results/ml-eval/{sim_prefix}{defence}-dataset.log"
     params:
         defence="{defence}",
-        simulate=False,
-    threads: 16
-    script:
-        "../scripts/create_datasets.py"
-
-
-rule ml_eval__simulated_dataset:
-    input:
-        unpack(ml_eval__dataset__inputs)
-    output:
-        "results/ml-eval/sim-{defence}-dataset.h5",
-    params:
-        defence="{defence}",
-        simulate=True,
+        simulate=lambda w: bool(w["sim_prefix"]),
+    wildcard_constraints:
+        sim_prefix="(sim-)?"
     threads: 16
     script:
         "../scripts/create_datasets.py"
