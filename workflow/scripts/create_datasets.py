@@ -98,12 +98,14 @@ def _select_samples(
 
     samples: Dict[int, List[str]] = {}
     for directory in directories:
-        stdout = directory/f"{defence}.stdout.txt"
         sample_id, _ = map(int, str(directory.name).split("_"))
-        if (
-            neqo.is_run_successful(directory/"control.stdout.txt")
-            and neqo.is_run_almost_successful(stdout, 10)
-        ):
+
+        is_valid = neqo.is_run_successful(directory/"control.stdout.txt")
+        if is_valid and defence != "control":
+            stdout = directory/f"{defence}.stdout.txt"
+            is_valid = is_valid and neqo.is_run_almost_successful(stdout, 10)
+
+        if is_valid:
             samples.setdefault(sample_id, []).append(directory)
 
     n_sufficient = sum(
@@ -122,7 +124,7 @@ def _select_samples(
 
     selected_samples = sorted(
         [id_ for id_, reps in samples.items() if len(reps) >= n_instances]
-    )
+    )[:n_samples]
     return {id_: sorted(samples[id_][:n_instances]) for id_ in selected_samples}
 
 
@@ -133,14 +135,17 @@ def _extract_sample(
         sample_trace = trace.from_pcap(directory/f"{defence}.pcapng")
     else:
         control = trace.from_pcap(directory/"control.pcapng")
-        schedule = trace.from_csv(directory/f"{defence}-schedule.csv")
-
-        if defence == "front":
-            sample_trace = front.simulate(control, schedule)
-        elif defence == "tamaraw":
-            sample_trace = schedule
+        if defence == "control":
+            sample_trace = control
         else:
-            raise ValueError(f"Unknown defence {defence!r}")
+            schedule = trace.from_csv(directory/f"{defence}-schedule.csv")
+
+            if defence == "front":
+                sample_trace = front.simulate(control, schedule)
+            elif defence == "tamaraw":
+                sample_trace = schedule
+            else:
+                raise ValueError(f"Unknown defence {defence!r}")
 
     hdf, row_id, hdf_lock = hdf_details
     with hdf_lock:

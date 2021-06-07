@@ -7,7 +7,7 @@ rule ml_eval__features:
     log:
         "results/ml-eval/features/{basename}.log"
     shell:
-        "workflow/scripts/extract-features {input} {output} > {log}"
+        "workflow/scripts/extract-features {input} {output} 2> {log}"
 
 
 rule ml_eval__splits:
@@ -42,15 +42,19 @@ rule ml_eval__predictions:
         lambda w: workflow.cores if w["classifier"] != "kfp" else 4
     shell:
         "workflow/scripts/evaluate-classifier {params.classifier_args}"
-        " {params.classifier} {input.dataset} {input.splits} {output}"
+        " {params.classifier} {input.dataset} {input.splits} {output} 2> {log}"
 
 
 rule ml_eval__plots:
     input:
         expand(
-            ["results/ml-eval/predictions/{defence}-dataset/{classifier}-{i}.csv",
-             "results/ml-eval/predictions/sim-{defence}-dataset/{classifier}-{i}.csv"],
+            ["results/ml-eval/predictions/{defence}-dataset-filtered/{classifier}-{i}.csv",
+             "results/ml-eval/predictions/sim-{defence}-dataset-filtered/{classifier}-{i}.csv"],
             defence=["front", "tamaraw"],
             classifier=["kfp"],
             i=range(config["experiment"]["ml_eval"]["splits"]["n_folds"])
-        )
+        ),
+        expand("results/ml-eval/predictions/control-dataset-filtered/{classifier}-{i}.csv",
+               classifier=["kfp", "dfnet"],
+               i=range(config["experiment"]["ml_eval"]["splits"]["n_folds"]))
+

@@ -85,9 +85,9 @@ rule ml_eval__filtered_dataset:
     """Remove packets below the configured threshold from the monitored and
     unmonitored traces."""
     input:
-        "results/ml-eval/{filename}.h5"
+        "results/ml-eval/{basename}.h5"
     output:
-        "results/ml-eval/{filename}-filtered.h5"
+        "results/ml-eval/{basename}-filtered.h5"
     params:
         size=config["experiment"]["ml_eval"]["min_packet_size"]
     shell:

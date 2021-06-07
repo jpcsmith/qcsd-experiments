@@ -9,7 +9,8 @@ sys.path.append("workflow/scripts/")
 
 wildcard_constraints:
     #: A filename without extension or path
-    basename="[a-zA-Z0-9_-]+"
+    basename="[a-zA-Z0-9_-]+",
+    defence="front|tamaraw|control"
 
 include: "rules/common.smk"
 include: "rules/alexa.smk"

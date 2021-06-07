@@ -1,6 +1,5 @@
 wildcard_constraints:
     mode="delay|drop",
-    defence="front|tamaraw"
 
 
 rule delay_vs_drop__collect_tamaraw:

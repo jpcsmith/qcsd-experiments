@@ -90,6 +90,12 @@ class Experiment:
 
         self.logger.info("Fitting the classifier...")
 
+        n_classes = len(np.unique(np.concatenate((y[train_idx], y[test_idx]))))
+        if n_classes != self.classifier_factory.n_classes:
+            self.logger.info("Changing the number of classes from %d to %d.",
+                             self.classifier_factory.n_classes, n_classes)
+            self.classifier_factory.n_classes = n_classes
+
         classifier = self.classifier_factory.create(
             random_state=random_state)
 

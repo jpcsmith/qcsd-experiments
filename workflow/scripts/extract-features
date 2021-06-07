@@ -15,7 +15,7 @@ from common import doceasy, classifiers
 
 
 _LOGGER = logging.getLogger("extract-features")
-CLASSIFIERS = ["dfnet", "p1fp", "kfp", "varcnn-time", "varcnn-sizes"]
+CLASSIFIERS = ["dfnet", "p1fp", "kfp"]  # , "varcnn-time", "varcnn-sizes"]
 
 
 def _write_features(h5group: h5py.Group, classifier_list, sizes, timestamps):
