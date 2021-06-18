@@ -1,0 +1,14 @@
+---
+all:
+  children:
+    wg_gateways:
+      vars:
+        ansible_user: root
+      hosts:
+        frankfurt:
+          region_id: 0
+          ansible_host: 206.189.60.150
+    wg_clients:
+      hosts:
+        localhost:
+          ansible_connection: local

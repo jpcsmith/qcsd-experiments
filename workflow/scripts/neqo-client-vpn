@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+#? Usage: neq-client-vpn <region_id> <client_id> ARGS
+#?
+#? Wrapper around neqo-client to connect via a Wireguard VPN that is
+#? running in the wg-client-<region_id>-<client_id> container.
+#?
+#? All other arguments are passed to neqo-client.
+#?
+#? The results directory is mounted to the same absolute path in the
+#? container, and the working directory is changed to a copy of the
+#? current directory in the container.
+#?
+#? The environemnt variables NEQO_BIN and NEQO_LD_PATH must be set.
+#? They are mounted in the container to allow NEQO to be run.
+set -e
+
+readonly REGION_ID=${1?"region_id required"}
+readonly CLIENT_ID=${2?"client_id required"}
+shift 2
+
+readonly NETWORK_IMAGE="wg-client-${REGION_ID}-${CLIENT_ID}"
+readonly NEQO_BIN=$(realpath "${NEQO_BIN?NEQO_BIN not set}")
+readonly NEQO_LD_PATH=$(realpath "${NEQO_LD_PATH?NEQO_LD_PATH not set}")
+
+DOCKER_RUN_ARGS=()
+# Disable the log driver so that if the output is streamed, it doesnt saturate
+# docker's logs
+DOCKER_RUN_ARGS+=(-i --rm --log-driver none)
+# Use the network of the Wireguard client through which we want to connect
+DOCKER_RUN_ARGS+=("--network=container:${NETWORK_IMAGE}")
+# Mimic the script location outside of the container and mount the results 
+# directory to allow for easy in/output
+DOCKER_RUN_ARGS+=(--workdir "$PWD" --volume "$PWD/results:$PWD/results:rw")
+# Mount the NEQO library path and the shared object path
+DOCKER_RUN_ARGS+=(--volume "${NEQO_BIN}:/usr/local/sbin/neqo-client")
+DOCKER_RUN_ARGS+=(--volume "${NEQO_LD_PATH}:/usr/local/lib/neqo:ro")
+# Constrain the CPU and memory usage to allow for parallel invocations
+DOCKER_RUN_ARGS+=(--memory "1.5g" --memory-reservation 1g --cpus 2)
+
+exec docker run "${DOCKER_RUN_ARGS[@]}" --entrypoint neqo-client wg-client "$@"

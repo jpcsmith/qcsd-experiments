@@ -1,0 +1,87 @@
+---
+- name: Setup Wireguard gateways
+  hosts: wg_gateways
+  vars_files:
+    - vars.yml
+  tasks:
+    - name: Install aptitude using apt
+      apt: name=aptitude state=latest update_cache=yes force_apt_get=yes
+
+    - name: Install required system packages
+      apt: name={{ item }} state=latest update_cache=yes
+      loop: ['wireguard']
+
+    - name: Generate the configuration
+      ansible.builtin.template:
+        src: templates/gateway-config.conf
+        dest: /etc/wireguard/wg0.conf
+        mode: '0644'
+      notify:
+        - Restart Wireguard
+
+    - name: Allow IP forwarding
+      ansible.posix.sysctl:
+        name: net.ipv4.ip_forward
+        value: '1'
+        sysctl_set: true
+
+    - name: Start the Wireguard gateway
+      ansible.builtin.shell: wg show wg0 || wg-quick up wg0
+      register: wg_start
+      changed_when: '"interface: wg0" not in wg_start.stdout'
+
+  handlers:
+    - name: Restart Wireguard
+      ansible.builtin.shell: >
+        if wg show wg0; then wg-quick down wg0 && wg-quick up wg0;
+        else wg-quick up wg0; fi
+
+- name: Setup Wireguard clients
+  hosts: wg_clients
+  vars_files:
+    - vars.yml
+  tasks:
+    - name: Define the resources folder
+      ansible.builtin.set_fact:
+        wg_resources: "{{(playbook_dir + '/../resources/wireguard')|realpath}}"
+
+    - name: Ensure {{ wg_resources }} dir exists
+      file: path={{ wg_resources }} state=directory
+
+    - name: Construct the region/client IDs
+      ansible.builtin.set_fact:
+        client_list: "{{ client_list | default([]) + [{
+          'region_id': item.0,
+          'client_id': item.1,
+          'tag': item.0 ~ '-' ~ item.1
+        }] }}"
+      loop: "{{ range(n_gateways) | product(range(n_clients_per_gateway)) }}"
+
+    - name: Generate the configuration
+      ansible.builtin.template:
+        src: templates/client-config.conf
+        dest: "{{ wg_resources }}/client-{{ item.region_id }}-{{ item.client_id }}.conf"
+        mode: '0644'
+      loop: "{{ client_list | flatten(levels=1) }}"
+
+    - name: Build the Wireguard client image
+      community.docker.docker_image:
+        name: wg-client
+        build: path="{{ wg_resources }}"
+        force_source: true
+        source: build
+
+    - name: Start the Wireguard client network images
+      community.docker.docker_container:
+        name: wg-client-{{ item.tag }}
+        image: wg-client
+        state: started
+        volumes:
+          - "{{ wg_resources }}/client-{{ item.tag }}.conf:/etc/wireguard/wg0.conf"
+        capabilities:
+          - NET_ADMIN
+          - SYS_MODULE
+        privileged: true
+        detach: true
+        dns_servers: [8.8.8.8, 9.9.9.9]
+      loop: "{{ client_list | flatten(levels=1) }}"

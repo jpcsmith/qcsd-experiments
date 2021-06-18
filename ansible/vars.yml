@@ -1,0 +1,17 @@
+---
+n_gateways: 1
+n_clients_per_gateway: 2
+
+# Wireguard client and gateway keys.
+#
+# Client keys are indexed by region_id then client_id, whereas gateway
+# keys are indexed by region_id
+wg_keys:
+  gateway:
+    - private: "YIerCk0AzdSJMLi24cT1QKSX05yA5XiAAwluR/kLSkY="
+      public: "Wo62rUO4iFGOro9RD5hsRTNf1ehsLVUoHDw3Oeqyiws="
+  client:
+    - - private: "kKPjiNs3q39GRQ0AeqXRL7EqEwGdYLohdSfAXuhOD3o="
+        public: "tgebJ6/VUz0kMHQKSfR8494Bw/B1wLkvMhWgTxRI8CA="
+      - private: "CMrYgeXRmpxmWf2+prLYXtvOaen6Fo8Fkl2cD1R4G1I="
+        public: "LOT3MIneb2SAMj6SSYRXuVK3qwlHXQbbw7dmSuT14GM="
