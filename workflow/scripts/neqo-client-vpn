@@ -28,6 +28,8 @@ DOCKER_RUN_ARGS=()
 DOCKER_RUN_ARGS+=(-i --rm --log-driver none)
 # Use the network of the Wireguard client through which we want to connect
 DOCKER_RUN_ARGS+=("--network=container:${NETWORK_IMAGE}")
+# Use the current user and group
+DOCKER_RUN_ARGS+=(--user $(id -u):$(id -g))
 # Mimic the script location outside of the container and mount the results 
 # directory to allow for easy in/output
 DOCKER_RUN_ARGS+=(--workdir "$PWD" --volume "$PWD/results:$PWD/results:rw")

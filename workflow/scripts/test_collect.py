@@ -1,29 +1,71 @@
 """Tests for collect.py"""
-from pathlib import Path
-
-from collect import Sample, Task
-
-
-def test_sample_creates_tasks():
-    """It should create a task per region."""
-    sample = Sample(Path("A"), n_instances=10, n_regions=3)
-    assert sample.get_tasks() == [Task(Path("A"), 0), Task(Path("A"), 1),
-                                  Task(Path("A"), 2)]
-
-    sample = Sample(Path("B"), n_instances=5, n_regions=1)
-    assert sample.get_tasks() == [Task(Path("B"), 0), ]
+# pylint: disable=invalid-name
+from collect import ProgressTracker
 
 
-def test_sample_is_complete():
-    """It should track completion of the sample."""
-    sample = Sample(Path("A"), n_instances=2, n_regions=2)
+def test_tracking():
+    """It should track completion of the web-page."""
+    tracker = ProgressTracker(n_instances=4, n_regions=2)
+    assert tracker.remaining_regions() == [0, 1]
 
-    assert not sample.is_complete()
-    sample.task_succeeded(region_id=0)
-    assert not sample.is_complete()
-    sample.task_succeeded(region_id=0)
-    assert not sample.is_complete()
-    sample.task_succeeded(region_id=1)
-    assert not sample.is_complete()
-    sample.task_succeeded(region_id=1)
-    assert sample.is_complete()
+    assert not tracker.is_complete()
+    tracker.success(region_id=0)
+    assert not tracker.is_complete()
+    assert tracker.remaining_regions() == [0, 1]
+
+    tracker.success(region_id=0)
+    assert not tracker.is_complete()
+    assert tracker.remaining_regions() == [1]
+
+    tracker.success(region_id=1)
+    assert not tracker.is_complete()
+    assert tracker.remaining_regions() == [1]
+
+    tracker.success(region_id=1)
+    assert tracker.is_complete()
+    assert tracker.remaining_regions() == []
+
+
+def test_sequential_failures_across_regions():
+    """It should report the number of failures across regions."""
+    tracker = ProgressTracker(n_instances=12, n_regions=3)
+
+    tracker.failure(region_id=0)
+    assert tracker.sequential_failures() == 1
+    tracker.failure(region_id=1)
+    assert tracker.sequential_failures() == 2
+    tracker.failure(region_id=2)
+    assert tracker.sequential_failures() == 3
+
+
+def test_sequential_failures_within_regions():
+    """It should report the number of failures max of the number of failures
+    within or across regions.
+    """
+    tracker = ProgressTracker(n_instances=12, n_regions=3)
+
+    tracker.failure(region_id=0)
+    assert tracker.sequential_failures() == 1
+    tracker.failure(region_id=1)
+    assert tracker.sequential_failures() == 2
+    tracker.failure(region_id=0)
+    assert tracker.sequential_failures() == 3
+    tracker.success(region_id=2)
+    assert tracker.sequential_failures() == 2
+
+
+def test_use_region():
+    """It should return the correct region."""
+    tracker = ProgressTracker(n_instances=1, n_regions=3)
+    assert tracker.remaining_regions() == [0]
+
+    tracker = ProgressTracker(n_instances=5, n_regions=3, use_only_region=2)
+    assert tracker.remaining_regions() == [2]
+
+
+def test_use_region_status():
+    """It should return the correct region."""
+    tracker = ProgressTracker(n_instances=1, n_regions=3, use_only_region=2)
+    assert not tracker.is_complete()
+    tracker.success(2)
+    assert tracker.is_complete()
