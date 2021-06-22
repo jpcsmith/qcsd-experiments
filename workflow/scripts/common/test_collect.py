@@ -1,6 +1,6 @@
 """Tests for collect.py"""
 # pylint: disable=invalid-name
-from collect import ProgressTracker
+from common.collect import ProgressTracker
 
 
 def test_tracking():

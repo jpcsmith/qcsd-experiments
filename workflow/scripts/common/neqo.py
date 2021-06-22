@@ -24,6 +24,7 @@ def run(
     stderr=None,
     env=None,
     tcpdump_kw=None,
+    neqo_exe=None
 ) -> bool:
     """Run neqo-client while capturing the traffic.
 
@@ -33,7 +34,7 @@ def run(
         with tcpdump(capture_filter="udp", **(tcpdump_kw or {})) as sniffer:
             (output, is_success) = _run_neqo(
                 neqo_args, keylog_file=keylog.name, ignore_errors=ignore_errors,
-                stdout=stdout, stderr=stderr, env=env,
+                stdout=stdout, stderr=stderr, env=env, neqo_exe=neqo_exe,
             )
 
         if pcap_file is not None:
@@ -94,7 +95,7 @@ def tcpdump(*args, **kwargs):
 
 def _run_neqo(
     neqo_args, keylog_file: str, ignore_errors: bool,
-    stdout=None, stderr=None, env=None,
+    stdout=None, stderr=None, env=None, neqo_exe=None,
 ):
     """Run NEQO and record its output and related files."""
     with contextlib.ExitStack() as stack:
@@ -113,7 +114,8 @@ def _run_neqo(
 
         is_success = False
         args = " ".join([(f"'{x}'" if " " in x else x) for x in neqo_args])
-        cmd = f"set -o pipefail; neqo-client {args} | tee {output_file.name}"
+        neqo_exe = neqo_exe or "neqo-client"
+        cmd = f"set -o pipefail; {neqo_exe} {args} | tee {output_file.name}"
         _LOGGER.info("Running NEQO with command: %r", cmd)
         try:
             subprocess.run(

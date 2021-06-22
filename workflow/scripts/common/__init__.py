@@ -5,7 +5,7 @@ from . import pcap, neqo
 __all__ = ["init_logging", "pcap", "neqo"]
 
 
-def init_logging(verbosity: int = 1, filename=None):
+def init_logging(verbosity: int = 1, filename=None, name_thread: bool = True):
     """Initialise the default logging behaviour.
 
     Verbosity is a value from 1 to 2 with 1 being INFO, 2 being DEBUG.
@@ -20,6 +20,7 @@ def init_logging(verbosity: int = 1, filename=None):
         2: logging.DEBUG
     }[verbosity]
 
+    thread = "@%(threadName)s" if name_thread else ""
     logging.basicConfig(
-        format='[%(asctime)s] %(name)s [%(levelname)s] %(message)s',
+        format=f"[%(asctime)s] %(name)s{thread} [%(levelname)s] %(message)s",
         level=log_level, filename=filename)

@@ -7,7 +7,7 @@ import logging
 import threading
 from queue import Queue
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Callable
 import dataclasses
 
 import numpy as np
@@ -19,10 +19,17 @@ class Client(threading.Thread):
     """A client for collecting a web-page sample, potentially through a
     VPN gateway.
     """
-    def __init__(self, region_id: int, client_id: int, queue: Queue):
+    def __init__(
+        self,
+        target: Callable[[Path, Path, str], bool],
+        region_id: int, client_id: int, queue: Queue
+    ):
         super().__init__(name=f"client-{region_id}-{client_id}")
+        self.target = target
         self.region_id = region_id
         self.client_id = client_id
+        self.neqo_exe = ("workflow/scripts/neqo-client-vpn {region_id}"
+                         " {client_id}")
         self.queue = queue
         self.log = logging.getLogger(__name__)
 
@@ -31,8 +38,9 @@ class Client(threading.Thread):
         self.log.debug("Processing task: %s", task)
         # We can modify the task here because the caller waits on the queue,
         # not on the task
+        task.is_success = self.target(
+            task.input_file, task.output_path, self.neqo_exe)
         task.is_done = True
-        task.is_success = True
 
     def run(self):
         while True:
@@ -49,6 +57,7 @@ class Client(threading.Thread):
 class Task:
     """A collection task."""
     input_file: Path
+    output_path: Path
     region_id: int
     is_done: bool = False
     is_success: bool = False
@@ -130,16 +139,20 @@ class Collector:
     """Orchestrates the collection of the required web-pages."""
     def __init__(
         self,
+        target: Callable[[Path, Path, str], bool] = lambda *_: True,
+        input_dir: str = "results/determine-url-deps/dependencies",
+        output_dir: str = "/tmp",
+        *,
         n_regions: int = 1,
         n_clients_per_region: int = 2,
         n_monitored: int = 5,
         n_instances: int = 10,
         n_unmonitored: int = 10,
         max_failures: int = 3,
-        input_dir: str = "results/determine-url-deps/dependencies",
     ):
         self.log = logging.getLogger(__name__)
         self.input_dir = input_dir
+        self.output_dir = output_dir
         self.n_regions = n_regions
         self.n_instances = n_instances
         self.n_monitored = n_monitored
@@ -148,6 +161,9 @@ class Collector:
         self.n_clients_per_region = n_clients_per_region
 
         self.region_queues: List[Queue] = [Queue() for _ in range(n_regions)]
+        self.workers = [Client(target, region_id, client_id, queue)
+                        for region_id, queue in enumerate(self.region_queues)
+                        for client_id in range(self.n_clients_per_region)]
 
     def run(self):
         """Collect the required number of samples."""
@@ -159,19 +175,15 @@ class Collector:
         trackers: Dict[Path, ProgressTracker] = dict()
         self._add_trackers(trackers, unused_web_pages)
 
-        # Create the client workers
-        workers = []
-        for region_id, queue in enumerate(self.region_queues):
-            for client_id in range(self.n_clients_per_region):
-                worker = Client(region_id, client_id, queue)
-                worker.start()
-                workers.append(worker)
+        # Start the client workers
+        for worker in self.workers:
+            worker.start()
 
         while self._run_batch(trackers):
             if self._remove_excessive_failures(trackers):
                 self._add_trackers(trackers, unused_web_pages)
 
-        self._close(workers)
+        self._close()
         # TODO: Rename files
 
     def _add_trackers(self, trackers, unused_web_pages):
@@ -220,7 +232,10 @@ class Collector:
     def _run_batch(self, trackers) -> bool:
         """Return True if any jobs were run, false otherwise."""
         tasks = [
-            Task(path, region_id=region)
+            Task(path,
+                 Path(self.output_dir, f"{path.stem}/{region}_").with_suffix(
+                     tracker.collected(region)),
+                 region_id=region)
             for (path, tracker) in trackers.items()
             for region in tracker.remaining_regions()
         ]
@@ -243,21 +258,22 @@ class Collector:
                 trackers[task.input_file].failure(task.region_id)
         return True
 
-    def _close(self, threads):
+    def _close(self):
         for queue in self.region_queues:
             for _ in range(self.n_clients_per_region):
                 queue.put(None)
-        for thread in threads:
+        for thread in self.workers:
             self.log.debug("Waiting for %s to close.", thread.name)
             thread.join()
+        self.workers = []
 
 
-def main():
-    """Start the collection."""
+def debug():
+    """Run the collector with default debugging arguments."""
     common.init_logging(verbosity=2, name_thread=True)
     collector = Collector()
     collector.run()
 
 
 if __name__ == "__main__":
-    main()
+    debug()
