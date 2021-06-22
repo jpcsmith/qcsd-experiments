@@ -27,13 +27,17 @@ rule ml_eval__collect:
         "../scripts/collect_ml_sample.py"
 
 
-def ml_eval__dataset__inputs(wildcards):
+def ml_eval__dataset__inputs(wildcards, use_shortcut=True):
     """Input function to select samples for the monitored and unmonitored datasets."""
     ml_eval = config["experiment"]["ml_eval"]
 
-    # Get the sample ids for which we have dependency graphs
-    dep_directory = checkpoints.url_dependency_graphs.get(**wildcards).output[0]
-    sample_ids = glob_wildcards(dep_directory + "/{sample_id}.json").sample_id
+    if use_shortcut:
+        from pathlib import Path
+        sample_ids = Path("results/determine-url-deps/dependency-ids.txt").read_text().split()
+    else:
+        # Get the sample ids for which we have dependency graphs
+        dep_directory = checkpoints.url_dependency_graphs.get(**wildcards).output[0]
+        sample_ids = glob_wildcards(dep_directory + "/{sample_id}.json").sample_id
 
     # Determine the IDs of the samples to use for the monitored and unmonitored
     n_monitored = ml_eval["monitored"]
@@ -65,8 +69,6 @@ def ml_eval__dataset__inputs(wildcards):
 
 rule ml_eval__dataset:
     """Combine the samples into an HDF5 dataset."""
-    input:
-        unpack(ml_eval__dataset__inputs)
     output:
         "results/ml-eval/{sim_prefix}{defence}-dataset.h5",
     log:
@@ -74,6 +76,7 @@ rule ml_eval__dataset:
     params:
         defence="{defence}",
         simulate=lambda w: bool(w["sim_prefix"]),
+        inputs=ml_eval__dataset__inputs
     wildcard_constraints:
         sim_prefix="(sim-)?"
     threads: 16

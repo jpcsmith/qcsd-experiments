@@ -59,3 +59,4 @@ experiment:
       n_folds: 10
       seed: 437
       validation_size: 0.1
+    classifiers: ["kfp", "dfnet"]

@@ -39,22 +39,30 @@ rule ml_eval__predictions:
         classifier_args=lambda w: ("--classifier-args n_jobs=4,feature_set=kfp"
                                    if w["classifier"] == "kfp" else "")
     threads:
-        lambda w: workflow.cores if w["classifier"] != "kfp" else 4
+        lambda w: min(workflow.cores, 16) if w["classifier"] != "kfp" else 4
     shell:
         "workflow/scripts/evaluate-classifier {params.classifier_args}"
         " {params.classifier} {input.dataset} {input.splits} {output} 2> {log}"
 
 
+def ml_eval__plots__input(_):
+    classifier_predictions = [
+        f"{classifier}-{i}.csv"
+        for classifier in config["experiment"]["ml_eval"]["classifiers"]
+        for i in range(
+            1 if classifier != "kfp"
+            else config["experiment"]["ml_eval"]["splits"]["n_folds"]
+        )
+    ]
+    datasets = expand([
+        "control-dataset", "control-dataset-filtered",
+        "{defence}-dataset", "{defence}-dataset-filtered",
+        "sim-{defence}-dataset", "sim-{defence}-dataset-filtered",
+    ], defence=["front", "tamaraw"])
+
+    return expand("results/ml-eval/predictions/{dataset}/{pred}", dataset=datasets,
+                  pred=classifier_predictions)
+
 rule ml_eval__plots:
     input:
-        expand(
-            ["results/ml-eval/predictions/{defence}-dataset-filtered/{classifier}-{i}.csv",
-             "results/ml-eval/predictions/sim-{defence}-dataset-filtered/{classifier}-{i}.csv"],
-            defence=["front", "tamaraw"],
-            classifier=["kfp"],
-            i=range(config["experiment"]["ml_eval"]["splits"]["n_folds"])
-        ),
-        expand("results/ml-eval/predictions/control-dataset-filtered/{classifier}-{i}.csv",
-               classifier=["kfp", "dfnet"],
-               i=range(config["experiment"]["ml_eval"]["splits"]["n_folds"]))
-
+        ml_eval__plots__input
