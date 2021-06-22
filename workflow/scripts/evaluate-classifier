@@ -26,6 +26,7 @@ import h5py
 import tensorflow
 import numpy as np
 from numpy.random import RandomState
+from lab.classifiers import kfingerprinting
 
 from common import doceasy
 from common.classifiers import ClassifierFactory, get_classifier_factory
@@ -110,6 +111,10 @@ class Experiment:
 
         self.logger.info(
             "Experiment complete in %.2fs.", (time.perf_counter() - start))
+
+        if isinstance(classifier, kfingerprinting.KFingerprintingClassifier):
+            importances = classifier.forest_.feature_importances_.tolist()
+            self.logger.info("Feature importances: %s", json.dumps(importances))
 
         return (probabilities, y[test_idx], classifier.classes_)
 

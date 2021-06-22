@@ -157,7 +157,7 @@ def _extract_sample(
 if __name__ == "__main__":
     snakemake = globals().get("snakemake", None)
     main(
-        input_=dict(snakemake.input),
+        input_=dict(snakemake.params["inputs"]),
         output=str(snakemake.output[0]),
         defence=snakemake.params["defence"],
         simulate=snakemake.params["simulate"],
