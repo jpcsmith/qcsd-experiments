@@ -1,4 +1,5 @@
 """Collect a trace with the provided tamaraw arguments."""
+# pylint: disable=too-many-arguments
 import logging
 import functools
 from pathlib import Path
@@ -14,25 +15,39 @@ _LOGGER = logging.getLogger(__name__)
 def collect_with_args(
     input_file: Path,
     output_dir: Path,
-    neqo_exe: str,
+    region_id: int,
+    client_id: int,
     neqo_args: List[str],
     config: Dict,
 ) -> bool:
     """Collect a trace using NEQO and return True iff it was successful."""
-    neqo_args.extend([
+    #: Copy the args, since it is shared among all method instances
+    neqo_args = neqo_args + [
         "--url-dependencies-from", str(input_file),
         "--defence-event-log", str(output_dir / "schedule.csv"),
-    ])
+    ]
+    client_port = config["wg_client_ports"][region_id][client_id]
 
-    return neqo.run(
+    result = neqo.run(
         neqo_args,
+        neqo_exe=[
+            "workflow/scripts/neqo-client-vpn", str(region_id), str(client_id)
+        ],
+        check=False,
         stdout=str(output_dir / "stdout.txt"),
-        stderr=str(output_dir / "stderr.text"),
-        pcap_file=str(output_dir / "trace.pcapng"),
+        stderr=str(output_dir / "stderr.txt"),
+        pcap=neqo.PIPE,
         env={"RUST_LOG": config["neqo_log_level"]},
-        ignore_errors=False,
-        neqo_exe=neqo_exe,
+        tcpdump_kw={
+            "capture_filter": f"udp port {client_port}", "iface": "docker0",
+        },
     )
+
+    if result.returncode == 0:
+        assert result.pcap is not None
+        (output_dir / "trace.pcapng").write_bytes(result.pcap)
+
+    return result.returncode == 0
 
 
 def main(
@@ -49,7 +64,7 @@ def main(
     max_failures: int,
 ):
     """Collect all the samples for the speicified arguments."""
-    common.init_logging(name_thread=True)
+    common.init_logging(name_thread=True, verbose=True)
 
     Collector(
         functools.partial(

@@ -1,167 +1,149 @@
 """Wrapper to run neqo-client binary."""
 import os
 import re
-import sys
 import logging
+import functools
 import contextlib
 import subprocess
-from pathlib import Path
 from subprocess import PIPE
+from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Union, Tuple, NamedTuple
+from typing import Union, Tuple, NamedTuple, Optional, Dict, List, BinaryIO
 from ipaddress import IPv4Address, IPv6Address, ip_address
 
-from lab.sniffer import TCPDumpPacketSniffer
+from lab.sniffer import tcpdump
+
+import common.pcap
 
 _LOGGER = logging.getLogger(__name__)
 
+#: A filelike object for redirection. Accepts values of
+#: subprocess.PIPE/STDERR/DEVNULL/STDOUT which are integers
+FileLike = Union[None, str, Path, BinaryIO, int]
 
-def run(
-    neqo_args,
-    pcap_file: Union[str, Path, None],
-    ignore_errors: bool,
-    stdout=None,
-    stderr=None,
-    env=None,
-    tcpdump_kw=None,
-    neqo_exe=None
-) -> bool:
-    """Run neqo-client while capturing the traffic.
-
-    Return True iff the capture was a success.
-    """
-    with NamedTemporaryFile(mode="r") as keylog:
-        with tcpdump(capture_filter="udp", **(tcpdump_kw or {})) as sniffer:
-            (output, is_success) = _run_neqo(
-                neqo_args, keylog_file=keylog.name, ignore_errors=ignore_errors,
-                stdout=stdout, stderr=stderr, env=env, neqo_exe=neqo_exe,
-            )
-
-        if pcap_file is not None:
-            pcap_bytes = _filter_packets(
-                sniffer.pcap(), output, ignore_errors=(not is_success))
-            pcap_bytes = _embed_tls_keys(pcap_bytes, keylog.name)
-
-            with open(pcap_file, mode="wb") as pcap:
-                pcap.write(pcap_bytes)
-
-        return is_success
-
-
-def is_run_successful(stdout_file: Union[str, Path]) -> bool:
-    """Return true if the output of neqo run indicates a success."""
-    stdout_file = Path(stdout_file)
-
-    # We check for the tag ">>> SUCCESS <<<" at the end of the file
-    # Read the entire file if it's small
-    if stdout_file.stat().st_size <= 1024:
-        return b">>> SUCCESS <<<" in stdout_file.read_bytes()
-
-    # Otherwise, seek to the end of the file and check only that
-    with open(stdout_file, mode="rb") as file_:
-        file_.seek(-30, os.SEEK_END)
-        return b">>> SUCCESS <<<" in file_.read()
-
-
-def is_run_almost_successful(
-    stdout_file: Union[str, Path], remaining: int
-) -> bool:
-    """Return true iff the run was successful or had at most
-    `remaining` packets remaining to collect.
-    """
-    if is_run_successful(stdout_file):
-        return True
-
-    tag = "[FlowShaper] final remaining packets:"
-    with open(stdout_file, mode="r") as stdout:
-        count = min(
-            (int(line[len(tag):]) for line in stdout if line.startswith(tag)),
-            default=None
-        )
-        return count is not None and count <= remaining
-
-
-@contextlib.contextmanager
-def tcpdump(*args, **kwargs):
-    """Sniff packets within a context manager using tcpdump.
-    """
-    sniffer = TCPDumpPacketSniffer(*args, **kwargs)
-    sniffer.start()
-    try:
-        yield sniffer
-    finally:
-        sniffer.stop()
-
-
-def _run_neqo(
-    neqo_args, keylog_file: str, ignore_errors: bool,
-    stdout=None, stderr=None, env=None, neqo_exe=None,
-):
-    """Run NEQO and record its output and related files."""
-    with contextlib.ExitStack() as stack:
-        output_file = stack.enter_context(NamedTemporaryFile(mode="rt"))
-
-        if isinstance(stdout, (str, Path)):
-            stdout = stack.enter_context(open(stdout, mode="w"))
-        if isinstance(stderr, (str, Path)):
-            stderr = stack.enter_context(open(stderr, mode="w"))
-
-        env = env or {}
-        env["SSLKEYLOGFILE"] = keylog_file
-        process_env = os.environ.copy()
-        process_env.update(env)
-        _LOGGER.info("Running NEQO with additional env vars: %s", env)
-
-        is_success = False
-        args = " ".join([(f"'{x}'" if " " in x else x) for x in neqo_args])
-        neqo_exe = neqo_exe or "neqo-client"
-        cmd = f"set -o pipefail; {neqo_exe} {args} | tee {output_file.name}"
-        _LOGGER.info("Running NEQO with command: %r", cmd)
-        try:
-            subprocess.run(
-                cmd,
-                # We need the shell so that we can do redirection
-                shell=True, executable='bash', env=process_env,
-                # Raise an exception on program error codes
-                check=True,
-                # Redirect stdout and stderr to the files if set
-                stdout=stdout, stderr=stderr
-            )
-            is_success = True
-        except subprocess.CalledProcessError as err:
-            if not ignore_errors:
-                raise
-            _LOGGER.error(err)
-            is_success = False
-
-        if ignore_errors:
-            print(">>> SUCCESS <<<" if is_success else ">>> FAILURE <<<",
-                  file=(sys.stdout if stdout is None else stdout))
-        return (output_file.read(), is_success)
-
-
-def _embed_tls_keys(pcap_bytes: bytes, keylog_file: str) -> bytes:
-    """Embed TLS keys and return a pcapng file with the embedded
-    secrets.
-    """
-    with open(keylog_file, "r") as keylog:
-        if len(keylog.read().strip()) == 0:
-            _LOGGER.warning("Keylog file is empty.")
-
-    result = subprocess.run([
-        "editcap",
-        "--inject-secrets", f"tls,{keylog_file}",
-        "-F", "pcapng",
-        "-", "-"
-    ], check=True, input=pcap_bytes, stdout=PIPE)
-
-    assert result.stdout is not None
-    return result.stdout
-
+TempFile = functools.partial(NamedTemporaryFile, dir=Path.cwd())
 
 Endpoint = NamedTuple('Endpoint', [
     ('ip', Union[IPv4Address, IPv6Address]), ('port', int)
 ])
+
+
+class NeqoCompletedProcess(subprocess.CompletedProcess):
+    # pylint: disable=too-few-public-methods
+    """The result of running the Neqo client.
+
+    Attributes:
+        local_endpoint :
+            The local UDP ip and port initiating the connection.
+        remote_endpoint :
+            The remote UDP ip and port initiating the connection.
+        pcap :
+            The pcapng of the captured traffic.
+    """
+    def __init__(self, result: subprocess.CompletedProcess):
+        super().__init__(
+            result.args, result.returncode, result.stdout, result.stderr
+        )
+        self.local_endpoint: Optional[Endpoint] = None
+        self.remote_endpoint: Optional[Endpoint] = None
+        self.pcap: Optional[bytes] = None
+
+
+def run(
+    neqo_args: List[str],
+    *,
+    check: bool = True,
+    stdout: FileLike = None,
+    stderr: FileLike = None,
+    pcap: FileLike = None,
+    env: Optional[Dict] = None,
+    neqo_exe: Optional[List[str]] = None,
+    tcpdump_kw: Optional[Dict] = None,
+) -> NeqoCompletedProcess:
+    """Run neqo-client and capture the communication traffic."""
+    env = env or dict()
+    tcpdump_kw = tcpdump_kw or dict()
+    tcpdump_kw.setdefault("capture_filter", "udp")
+
+    if (
+        not isinstance(pcap, (str, Path, BinaryIO))
+        and pcap != subprocess.PIPE
+        and pcap is not None
+    ):
+        raise ValueError(f"Unsupported pcap value: {pcap!r}")
+
+    with contextlib.ExitStack() as stack:
+        if "SSLKEYLOGFILE" not in env:
+            keylog = stack.enter_context(TempFile(mode="r")).name
+        keylog = env.setdefault("SSLKEYLOGFILE", keylog)
+
+        if isinstance(stderr, (str, Path)):
+            stderr = stack.enter_context(open(stderr, mode="wb"))
+        if isinstance(stdout, (str, Path)):
+            stdout = stack.enter_context(open(stdout, mode="wb"))
+
+        with tcpdump(**tcpdump_kw) as sniffer:
+            result = _run_neqo(neqo_args, neqo_exe=neqo_exe, check=check,
+                               stdout=stdout, stderr=stderr, env=env)
+
+        # Stdout is always set by _run_neqo. Extract it and clear it if not
+        # explicity requested
+        stdout_data = result.stdout.decode("utf-8")
+        if stdout != PIPE and stderr != subprocess.STDOUT:
+            result.stdout = None
+        result = NeqoCompletedProcess(result)
+
+        # Endpoints and pcap is not attached on failure
+        if result.returncode == 0:
+            (result.local_endpoint, result.remote_endpoint) = \
+                extract_endpoints(stdout_data)
+
+        # None is the only case in which we do not use the PCAP
+        if result.returncode == 0 and pcap is not None:
+            assert pcap == PIPE or isinstance(pcap, (str, Path))
+            pcap_bytes = common.pcap.embed_tls_keys(sniffer.pcap(), keylog)
+            if isinstance(pcap, (str, Path)):
+                Path(pcap).write_bytes(pcap_bytes)
+            else:
+                result.pcap = pcap_bytes
+    return result
+
+
+def _run_neqo(
+    neqo_args: List[str],
+    *,
+    check: bool,
+    stdout: Union[None, BinaryIO, int],
+    stderr: Union[None, BinaryIO, int],
+    env: Dict,
+    neqo_exe: Optional[List[str]] = None,
+):
+    """Run NEQO and record its output and related files."""
+    cmd = (neqo_exe or ["neqo-client"]) + neqo_args
+
+    with TempFile(mode="rb") as output_file:
+        _LOGGER.debug("Running NEQO with additional env vars: %s", env)
+        # Update the process environment with the received env
+        env = {**os.environ, **env}
+
+        # Escape any arguments that have spaces
+        cmd_str = " ".join([f"'{x}'" if " " in x else x for x in cmd])
+        cmd_str = f"set -o pipefail; {cmd_str} | tee {output_file.name}"
+        _LOGGER.debug("Running NEQO with command: %r", cmd_str)
+
+        result = subprocess.run(
+            cmd_str,
+            # We need the shell so that we can do redirection
+            shell=True, executable='bash', env=env,
+            # Raise an exception on program error codes
+            check=check,
+            # Redirect stdout and stderr to the files if set
+            stdout=stdout, stderr=stderr
+        )
+
+        if result.stdout is None:
+            result.stdout = output_file.read()
+        return result
 
 
 def extract_endpoints(neqo_output: str) -> Tuple[Endpoint, Endpoint]:
@@ -186,33 +168,3 @@ def extract_endpoints(neqo_output: str) -> Tuple[Endpoint, Endpoint]:
 
     return (Endpoint(ip_address(match["lip"]), int(match["lport"])),
             Endpoint(ip_address(match["rip"]), int(match["rport"])))
-
-
-def _filter_packets(
-    pcap_bytes: bytes, neqo_output: str, ignore_errors: bool
-) -> bytes:
-    """Filter the packets to the IPs and ports extracted from
-    neqo_output and return a pcapng with the data.
-    """
-    try:
-        (local, remote) = extract_endpoints(neqo_output)
-    except ValueError:
-        if not ignore_errors:
-            raise
-        display_filter = "udp.port"
-    else:
-        dst_ver = "ipv6" if remote.ip.version == 6 else "ip"
-        # Filter to packets from the remote ip and local port
-        # Exclude the local IP as this may change depending on the vantage point
-        display_filter = (
-            f"{dst_ver}.addr=={remote.ip} and udp.port=={remote.port}"
-            f" and udp.port=={local.port}"
-        )
-
-    result = subprocess.run([
-        "tshark", "-r", "-", "-w", "-", "-F", "pcapng", "-Y", display_filter
-    ], check=True, input=pcap_bytes, stdout=PIPE)
-
-    # Ensure that the result is neither none nor empty
-    assert result.stdout
-    return result.stdout

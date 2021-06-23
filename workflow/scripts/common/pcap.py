@@ -5,9 +5,40 @@ import subprocess
 import tempfile
 from pathlib import Path
 from dataclasses import dataclass
-from typing import List, Iterator, NamedTuple, Set
+from typing import List, Iterator, NamedTuple, Set, Union
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def filter_pcap(pcap: Union[str, Path, bytes], display_filter: str) -> bytes:
+    """Filter and return the pcap with the provided display filter."""
+    input_, infile = (pcap, "-") if isinstance(pcap, bytes) else (None, pcap)
+
+    return subprocess.run(
+        ["tshark", "-r", str(infile), "-w", "-", "-F", "pcapng",
+         "-Y", display_filter],
+        check=True,
+        input=input_,
+        stdout=subprocess.PIPE
+    ).stdout
+
+
+def embed_tls_keys(pcap_bytes: bytes, keylog_file: str) -> bytes:
+    """Embed TLS keys and return a pcapng file with the embedded
+    secrets.
+    """
+    if not Path(keylog_file).read_text().strip():
+        raise ValueError("Keylog file is empty.")
+
+    result = subprocess.run([
+        "editcap",
+        "--inject-secrets", f"tls,{keylog_file}",
+        "-F", "pcapng",
+        "-", "-"
+    ], check=True, input=pcap_bytes, stdout=subprocess.PIPE)
+
+    assert result.stdout is not None
+    return result.stdout
 
 
 @dataclass
