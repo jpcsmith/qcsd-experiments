@@ -5,6 +5,8 @@ import functools
 from pathlib import Path
 from typing import Dict, List
 
+import lab.tracev2 as trace
+
 import common
 from common import neqo
 from common.collect import Collector
@@ -46,6 +48,8 @@ def collect_with_args(
     if result.returncode == 0:
         assert result.pcap is not None
         (output_dir / "trace.pcapng").write_bytes(result.pcap)
+        trace.to_csv((output_dir / "trace.csv"),
+                     trace.from_pcap(result.pcap, client_port=client_port))
 
     return result.returncode == 0
 

@@ -1,5 +1,4 @@
-"""Perform the collection.
-"""
+"""Orchestrate the collection of web-pages"""
 # pylint: disable=too-many-arguments,too-many-instance-attributes
 # pylint: disable=too-few-public-methods,broad-except
 import sys
@@ -10,7 +9,7 @@ import dataclasses
 from queue import Queue
 from pathlib import Path
 from itertools import islice
-from typing import List, Dict, Callable, Optional
+from typing import List, Dict, Callable, Optional, Set
 
 import numpy as np
 
@@ -55,10 +54,14 @@ class Client(threading.Thread):
             # not on the task
             try:
                 self.log.debug("Processing task: %s", task)
-                task.output_dir.mkdir(parents=True, exist_ok=True)
-                task.is_success = self.target(
-                    task.input_file, task.output_dir, self.region_id,
-                    self.client_id)
+                if task.output_dir.is_dir():
+                    self.log.debug("Skipping as directory already exists.")
+                    task.is_success = True
+                else:
+                    task.output_dir.mkdir(parents=True, exist_ok=True)
+                    task.is_success = self.target(
+                        task.input_file, task.output_dir, self.region_id,
+                        self.client_id)
             except Exception:
                 self.log.exception("Encountered an exception")
                 task.is_success = False
@@ -159,19 +162,37 @@ class ProgressTracker:
 
 
 class Collector:
-    """Orchestrates the collection of the required web-pages."""
+    """Orchestrates the collection of web-pages.
+
+    Collects n_monitored × n_instances + n_unmonitored web-page samples
+    using the provided function (target).
+
+    The instances are distributed across the regions 0, ..., n_regions-1
+    with n_clients_per_region created for each region to perform the
+    collection.
+
+    The input directory (input_dir) must contain files <stem>.json used
+    as dependencies for the collection.  For each *.json file in
+    input_dir, target is called with the path to file, an output
+    directory, the region_id, and client_id.  The results are written to
+    <output_dir>.wip/<stem>/<region_id>_<region_sample>/ before being
+    moved to output_dir.
+
+    A web-page is can have at most max_failures successive failures
+    within or across its regions before it is discarded.
+    """
     def __init__(
         self,
-        target: TargetFn = lambda *_: True,
-        input_dir: str = "results/determine-url-deps/dependencies",
-        output_dir: str = "/tmp",
+        target: TargetFn,
+        input_dir: str,
+        output_dir: str,
         *,
-        n_regions: int = 1,
-        n_clients_per_region: int = 2,
-        n_monitored: int = 5,
-        n_instances: int = 10,
-        n_unmonitored: int = 10,
-        max_failures: int = 3,
+        n_regions: int,
+        n_clients_per_region: int,
+        n_monitored: int,
+        n_instances: int,
+        n_unmonitored: int,
+        max_failures: int,
     ):
         self.log = logging.getLogger(__name__)
         self.input_dir = input_dir
@@ -183,10 +204,27 @@ class Collector:
         self.max_failures = max_failures
         self.n_clients_per_region = n_clients_per_region
 
+        self.wip_output_dir = self.output_dir.with_suffix(".wip")
+        self.bad_inputs: Set[Path] = self._load_bad_inputs()
         self.region_queues: List[Queue] = [Queue() for _ in range(n_regions)]
         self.workers = [Client(target, region_id, client_id, queue)
                         for region_id, queue in enumerate(self.region_queues)
                         for client_id in range(self.n_clients_per_region)]
+
+    def _load_bad_inputs(self):
+        cache = self.wip_output_dir / "bad-inputs-list.txt"
+        bad_inputs = set()
+        if cache.is_file():
+            with cache.open(mode="r") as infile:
+                bad_inputs = set(Path(line) for line in infile.readlines())
+        self.log.debug("Loaded %d bad inputs", len(bad_inputs))
+        return bad_inputs
+
+    def _save_bad_inputs(self):
+        cache = self.wip_output_dir / "bad-inputs-list.txt"
+        cache.write_text(
+            "\n".join(str(path) for path in self.bad_inputs) + "\n"
+        )
 
     def run(self):
         """Collect the required number of samples."""
@@ -212,14 +250,21 @@ class Collector:
                     self._add_trackers(trackers, unused_web_pages)
         finally:
             self._close()
-        # TODO: Rename files
+
+        # Move the work in progress directory to the final location
+        self.wip_output_dir.rename(self.output_dir)
 
     def _add_trackers(self, trackers, unused_web_pages):
         if len(trackers) == self.n_monitored + self.n_unmonitored:
             return
 
         while len(trackers) != self.n_monitored + self.n_unmonitored:
-            trackers[unused_web_pages.pop()] = ProgressTracker(
+            web_page = unused_web_pages.pop()
+            if web_page in self.bad_inputs:
+                self.log.debug("Skipping %s since it a bad input", web_page)
+                continue
+
+            trackers[web_page] = ProgressTracker(
                 n_regions=self.n_regions, n_instances=1)
 
         for tracker in islice(trackers.values(), 0, self.n_monitored):
@@ -254,7 +299,9 @@ class Collector:
         for path in to_drop:
             self.log.debug("Dropping %s as it has too many failures: %d",
                            path, trackers[path].sequential_failures())
+            self.bad_inputs.add(path)
             del trackers[path]
+        self._save_bad_inputs()
         return bool(to_drop)
 
     def _run_batch(self, trackers) -> bool:
@@ -263,9 +310,8 @@ class Collector:
         for (path, tracker) in trackers.items():
             for r_id in tracker.remaining_regions():
                 region_sample = tracker.completed[r_id]
-                output_dir = Path(
-                    self.output_dir.with_suffix(".wip"), f"{path.stem}",
-                    f"{r_id}_{region_sample}")
+                output_dir = Path(self.wip_output_dir, f"{path.stem}",
+                                  f"{r_id}_{region_sample}")
                 tasks.append(Task(path, region_id=r_id, output_dir=output_dir))
                 self.region_queues[r_id].put(tasks[-1])
 
@@ -298,7 +344,17 @@ class Collector:
 def debug():
     """Run the collector with default debugging arguments."""
     common.init_logging(verbosity=2, name_thread=True)
-    collector = Collector()
+    collector = Collector(
+        target=lambda *_: True,
+        input_dir="results/determine-url-deps/dependencies",
+        output_dir="/tmp",
+        n_regions=1,
+        n_clients_per_region=2,
+        n_monitored=5,
+        n_instances=10,
+        n_unmonitored=10,
+        max_failures=3,
+    )
     collector.run()
 
 
