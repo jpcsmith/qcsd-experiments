@@ -1,6 +1,6 @@
 ---
-n_gateways: 1
-n_clients_per_gateway: 2
+n_gateways: 3
+n_clients_per_gateway: 4
 
 # Wireguard client and gateway keys.
 #
@@ -10,8 +10,32 @@ wg_keys:
   gateway:
     - private: "YIerCk0AzdSJMLi24cT1QKSX05yA5XiAAwluR/kLSkY="
       public: "Wo62rUO4iFGOro9RD5hsRTNf1ehsLVUoHDw3Oeqyiws="
+    - private: "qIIYfM/3XGtyTyD3GZGno2eyfrBf2dBCvb6T5aIlSnU="
+      public: "F77A0MVc9IqMSTAXRI14CfFhazmUEToemctoy5L4eyE="
+    - private: "mAXavV61YIeExDKJqOFT69PyyTtdWudUwTkzA79kC0k="
+      public: "0cWyfNQ67XTwCr/BdurhNXFty8kWCqWuWgWglirU9hM="
   client:
     - - private: "kKPjiNs3q39GRQ0AeqXRL7EqEwGdYLohdSfAXuhOD3o="
         public: "tgebJ6/VUz0kMHQKSfR8494Bw/B1wLkvMhWgTxRI8CA="
       - private: "CMrYgeXRmpxmWf2+prLYXtvOaen6Fo8Fkl2cD1R4G1I="
         public: "LOT3MIneb2SAMj6SSYRXuVK3qwlHXQbbw7dmSuT14GM="
+      - private: "4CszentbL41EfShVc0WeaOGqHXukFyHV6Ycpq6KW8kA="
+        public: "tNw9ihKDgTrlB04kp9j0cOGYNBTmpuHoPfh7yW/H33E="
+      - private: "mMR3zASdErSXJPhZAT2JJ0TqmQX2R6Lf9fCf6bdeCXs="
+        public: "0k3cjHRFMCrD2KgzB9XkRaPuENevY/egvDwYHVo6P1A="
+    - - private: "WOnEOayVPw+HYh/eLyqr01qpGAiMVy3166iBysUMDU8="
+        public: "7ITgF9s9A7QczQt1wkwhWKOuXyYyorxIwhqLm+IiWBE="
+      - private: "gGUH5qQMtdFN2HAlG0B1IpyZvkpYCBrZLGYVklt+/Gs="
+        public: "htevsdLTXSQmswjnQZtSAr5aWkQpV2a20GE9JkUIwRs="
+      - private: "IDHWVAXWqak/Ue/m6UiC8GQ9aBAVmKdZj78xBe3KwWY="
+        public: "7i4KlRQQTueh32IMVTEVYWRcQn4IHO2RESb3NvAFCys="
+      - private: "wGjp34GJyryw9IX4cTzUOzlVR9Jpz0qs1zNWYSP0yXE="
+        public: "CC2O/5PxXTF/BaPTW7J82OMCRZS+cI2hpZ9ldMVgxDQ="
+    - - private: "kFrk5qM/sEhXABK6OLaTZS2/+AfKVWFIJBuxQIgUlEI="
+        public: "cNSWsaV7OVbGCfAsc0Pxgm4ZaDOf5MsE0RXbvelCICQ="
+      - private: "6BE9awUzkRpHausLwn2kovDfbtZj6GhkpAePaHQlRG0="
+        public: "3Q1BprdnJiMZ6MSVjObnAq4byIMZZzZiai5eljtLqzQ="
+      - private: "+MdV0Jk6MCoGS4b13YrWHrBmflan0agGs0CeRCAtZHw="
+        public: "kzVQX/56iuQLIpvXVxzGu+SbjUgL5n7+J6E7WikrXEM="
+      - private: "aNB2/8UfLlrCcmeHBiwEjxJZSiaUXeWHcCw4duOMLHA="
+        public: "fSjNDjiytr6cQVG19vOQcH4PaRHBhUSc/oeZiy01HzU="

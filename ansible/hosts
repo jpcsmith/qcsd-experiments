@@ -1,0 +1,10 @@
+[wg_gateways]
+frankfurt   region_id=0 ansible_host=134.122.67.174
+new_york    region_id=1 ansible_host=139.59.39.118
+bengaluru   region_id=2 ansible_host=167.71.110.76
+
+[wg_gateways:vars]
+ansible_user=root
+
+[wg_clients]
+localhost   ansible_connection=local ansible_python_interpreter="{{ ansible_playbook_python }}"

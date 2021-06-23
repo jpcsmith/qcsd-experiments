@@ -1,0 +1,14 @@
+---
+- name: Setup the Chromium browser fetch image
+  hosts: localhost
+  tasks:
+    - name: Define the resources folder
+      ansible.builtin.set_fact:
+        resources: "{{(playbook_dir + '/../resources') | realpath}}"
+
+    - name: Build the browser image
+      community.docker.docker_image:
+        name: dep-fetch
+        source: build
+        build: path="{{ resources }}/docker/dep-fetch"
+        force_source: true
