@@ -19,13 +19,16 @@ readonly CLIENT_ID=${2?"client_id required"}
 shift 2
 
 readonly NETWORK_IMAGE="wg-client-${REGION_ID}-${CLIENT_ID}"
-readonly NEQO_BIN=$(realpath "${NEQO_BIN?NEQO_BIN not set}")
-readonly NEQO_LD_PATH=$(realpath "${NEQO_LD_PATH?NEQO_LD_PATH not set}")
+# Check whether they are set outside of the subshell to exit
+: "${NEQO_BIN?NEQO_BIN not set}"
+readonly NEQO_BIN=$(realpath "${NEQO_BIN}")
+: "${NEQO_LD_PATH?NEQO_LD_PATH not set}"
+readonly NEQO_LD_PATH=$(realpath "${NEQO_LD_PATH}")
 
 DOCKER_RUN_ARGS=()
 # Disable the log driver so that if the output is streamed, it doesnt saturate
 # docker's logs
-DOCKER_RUN_ARGS+=(-i --rm --log-driver none)
+DOCKER_RUN_ARGS+=(-i --init --rm --log-driver none)
 # Use the network of the Wireguard client through which we want to connect
 DOCKER_RUN_ARGS+=("--network=container:${NETWORK_IMAGE}")
 # Use the current user and group

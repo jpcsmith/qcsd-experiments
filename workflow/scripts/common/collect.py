@@ -1,6 +1,7 @@
 """Orchestrate the collection of web-pages"""
 # pylint: disable=too-many-arguments,too-many-instance-attributes
 # pylint: disable=too-few-public-methods,broad-except
+import os
 import sys
 import shutil
 import logging
@@ -251,6 +252,10 @@ class Collector:
         finally:
             self._close()
 
+        # Prune any empty directories
+        for (dirpath, _, files) in os.walk(self.wip_output_dir, topdown=False):
+            if not files:
+                Path(dirpath).rmdir()
         # Move the work in progress directory to the final location
         self.wip_output_dir.rename(self.output_dir)
 

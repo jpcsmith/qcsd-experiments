@@ -6,12 +6,10 @@
 # =================
 # Install Wireguard
 # =================
-FROM python:3.9-slim-buster
+FROM ubuntu:20.04
 
-RUN echo "deb http://deb.debian.org/debian buster-backports main" \
-        > /etc/apt/sources.list.d/backports.list \
-    && apt-get -qq update \
-    && apt-mark hold nftables \
+RUN apt-get -qq update \
+    # && apt-mark hold nftables \
     && apt-get -qq install -y iptables iproute2 wireguard procps wget iputils-ping \
     && rm -rf /var/lib/apt/lists/*
 
