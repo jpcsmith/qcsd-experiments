@@ -1,24 +1,38 @@
 ---
 # The Alexa top list, http://s3.amazonaws.com/alexa-static/top-1m.csv.zip
-alexa_list: resources/alexa-1m-2021-05-19.csv.gz
+alexa_list: resources/alexa-1m-2021-06-24.csv.gz
 
 # Versions of QUIC supported in our experiments
 quic_versions: ["h3-29"]
 
 # Second level domains that whose representation in the dataset are reduced
-frequent_slds: ["blogspot.com", "appspot.com", "myshopify.com", "withgoogle.com", "translate.goog"]
+frequent_slds: ["blogspot.com", "appspot.com", "myshopify.com", "withgoogle.com",
+                "translate.goog", "sch.id"]
+
+webpage_graphs:
+  # The number of dependency graphs collected in each batch
+  batch_size: 100
+  # Collect n_batches * batch_size web-page graphs
+  n_batches: 140
 
 # The log level passed to RUST_LOG for the neqo-client
 neqo_log_level: "neqo-transport=info"
 
 # The User-Agent to use for collections
-user_agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36"
+user_agent: >-
+  Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko)
+  Chrome/87.0.4280.88 Safari/537.36
 
-url_deps:
-  batch_size: 100
-  n_batches: 140
+wireguard:
+  n_regions: 3
+  n_clients_per_region: 4
+  client_ports:
+    - [51801, 51802, 51803, 51804]
+    - [51811, 51812, 51813, 51814]
+    - [51821, 51822, 51823, 51824]
+  interface: "docker0"
 
-defaults:
+defence_defaults:
   front_config: &front-default
     max_client_packets: 2500
     max_server_packets: 2500
@@ -26,36 +40,37 @@ defaults:
     peak_minimum: 1
     peak_maximum: 14
   tamaraw_config: &tamaraw-default
-    packet_size: 750
-    rate_in: 0.005
-    rate_out: 0.02
+    rate_in: 5
+    rate_out: 20
     pad_multiple: 100
-
-wg_client_ports:
-  - [51801, 51802, 51803, 51804]
-  - [51811, 51812, 51813, 51814]
-  - [51821, 51822, 51823, 51824]
+    packet_size: 750
 
 experiment:
   scores:
     ts_offset: {min: 0, max: 200, inc: 5}
     resample_rates: ["5ms", "25ms", "50ms"]
+
   excess_msd:
     max_samples: 1000
-    padding: { rate: 1, duration: 10, interval: 5 }  # Mbps, seconds, milliseconds
-    excess_values: [ 16, 350, 700, 1000, 2000 ]
-  # NOTE: The single_eval *_configs are also used in the delay-vs-drop experiment
+    padding: {rate: 1, duration: 10, interval: 5}  # Mbps, seconds, milliseconds
+    excess_values: [16, 350, 700, 1000, 2000]
+
   delay_vs_drop:
-    max_samples: 100
+    n_monitored: 20
+    n_instances: 100
+    tamaraw: *tamaraw-default
+
   front_single_eval:
     max_samples: 1000
     front_config: *front-default
+
   tamaraw_single_eval:
     max_samples: 1000
     tamaraw_config: *tamaraw-default
+
   ml_eval:
-    monitored: { samples: 100, instances: 100, extra: 0.6 }
-    unmonitored: { samples: 10_000, instances: 1, extra: 0.25 }
+    monitored: {samples: 100, instances: 100, extra: 0.6}
+    unmonitored: {samples: 10_000, instances: 1, extra: 0.25}
     snaplen: 96
     front_config: *front-default
     tamaraw_config: *tamaraw-default
