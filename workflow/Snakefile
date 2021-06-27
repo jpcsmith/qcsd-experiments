@@ -1,10 +1,9 @@
 import sys
+#: Ensure that the rules can find any modules defined in workflow/scripts/
+sys.path.append("workflow/scripts/")
 
 
 configfile: "config/config.yaml"
-
-#: Ensure that the rules can find any modules defined in workflow/scripts/
-sys.path.append("workflow/scripts/")
 
 
 wildcard_constraints:
@@ -12,14 +11,14 @@ wildcard_constraints:
     basename="[a-zA-Z0-9_-]+",
     defence="front|tamaraw|control"
 
-include: "rules/common.smk"
+
 include: "rules/alexa.smk"
 include: "rules/schedules.smk"
 include: "rules/version-scan.smk"
-include: "rules/determine-url-deps.smk"
-include: "rules/excess-msd.smk"
+include: "rules/webpage-graphs.smk"
 include: "rules/delay-vs-drop.smk"
-include: "rules/front-eval.smk"
-include: "rules/tamaraw-eval.smk"
-include: "rules/ml-eval-dataset.smk"
+# include: "rules/excess-msd.smk"
+# include: "rules/front-eval.smk"
+# include: "rules/tamaraw-eval.smk"
+# include: "rules/ml-eval-dataset.smk"
 # include: "rules/ml-eval.smk"
