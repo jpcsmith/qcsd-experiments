@@ -22,6 +22,7 @@ def collect_with_args(
     client_id: int,
     neqo_args: List[str],
     config: Dict,
+    timeout: float,
 ) -> bool:
     """Collect a trace using NEQO and return True iff it was successful."""
     #: Copy the args, since it is shared among all method instances
@@ -51,6 +52,7 @@ def collect_with_args(
             tcpdump_kw={
                 "capture_filter": f"udp port {client_port}", "iface": interface,
             },
+            timeout=timeout,
         )
     except subprocess.TimeoutExpired as err:
         _LOGGER.debug("Neqo timed out: %s", err)

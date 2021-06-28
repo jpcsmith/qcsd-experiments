@@ -32,8 +32,10 @@ def main(
     sample_dirs = [p for p in Path(input_).iterdir() if p.is_dir()]
     sample_dirs.sort(key=lambda p: int(p.stem))
 
-    if len(sample_dirs) != n_monitored + n_unmonitored:
+    if len(sample_dirs) < n_monitored + n_unmonitored:
         raise ValueError(f"Insufficient samples: {len(sample_dirs)}")
+    if len(sample_dirs) > n_monitored + n_unmonitored:
+        raise ValueError(f"Too many sample directories: {len(sample_dirs)}")
 
     # TODO: Need to handle the FRONT defence
     assert isinstance(simulate, bool), "simulate not boolean?"

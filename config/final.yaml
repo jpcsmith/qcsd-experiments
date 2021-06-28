@@ -59,6 +59,10 @@ experiment:
     n_monitored: 20
     n_instances: 100
     tamaraw: *tamaraw-default
+    splits:
+      n_folds: 5
+      seed: 6781
+      validation_size: 0.1
 
   front_single_eval:
     max_samples: 1000

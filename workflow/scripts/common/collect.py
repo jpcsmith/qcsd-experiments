@@ -1,7 +1,6 @@
 """Orchestrate the collection of web-pages"""
 # pylint: disable=too-many-arguments,too-many-instance-attributes
 # pylint: disable=too-few-public-methods,broad-except
-import os
 import sys
 import shutil
 import logging
@@ -217,15 +216,13 @@ class Collector:
         bad_inputs = set()
         if cache.is_file():
             with cache.open(mode="r") as infile:
-                bad_inputs = set(Path(line) for line in infile.readlines())
+                bad_inputs = set(Path(p.strip()) for p in infile.readlines())
         self.log.debug("Loaded %d bad inputs", len(bad_inputs))
         return bad_inputs
 
     def _save_bad_inputs(self):
         cache = self.wip_output_dir / "bad-inputs-list.txt"
-        cache.write_text(
-            "\n".join(str(path) for path in self.bad_inputs) + "\n"
-        )
+        cache.write_text("\n".join(str(path) for path in self.bad_inputs))
 
     def run(self):
         """Collect the required number of samples."""
@@ -253,9 +250,11 @@ class Collector:
             self._close()
 
         # Prune any empty directories
-        for (dirpath, _, files) in os.walk(self.wip_output_dir, topdown=False):
-            if not files:
-                Path(dirpath).rmdir()
+        # for (dirpath, dirs, files) in os.walk(
+        #     self.wip_output_dir, topdown=False
+        # ):
+        #     if not files and not dirs:
+        #         Path(dirpath).rmdir()
         # Move the work in progress directory to the final location
         self.wip_output_dir.rename(self.output_dir)
 
@@ -305,7 +304,11 @@ class Collector:
             self.log.debug("Dropping %s as it has too many failures: %d",
                            path, trackers[path].sequential_failures())
             self.bad_inputs.add(path)
+            # Stop using the sample for collection and remove any files
+            # collected
             del trackers[path]
+            shutil.rmtree(Path(self.wip_output_dir, f"{path.stem}"))
+
         self._save_bad_inputs()
         return bool(to_drop)
 

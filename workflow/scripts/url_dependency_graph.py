@@ -17,7 +17,7 @@ import logging
 import fileinput
 import urllib.parse
 from collections import Counter
-from typing import Set, Optional, Iterator, Dict, List
+from typing import Set, Optional, Iterator, Dict, List, Any
 from pathlib import Path
 import networkx as nx
 
@@ -41,6 +41,14 @@ def origin(url: str) -> str:
 
 class InvalidGraphError(RuntimeError):
     """Raised when construction would result in an empty graph."""
+
+
+def _rget(mapping, keys: List[Any], default=None):
+    """Recrusvie get."""
+    assert isinstance(keys, list)
+    for key in keys[:-1]:
+        mapping = mapping.get(key, {})
+    return mapping.get(keys[-1], default)
 
 
 class _DependencyGraph:
@@ -102,7 +110,9 @@ class _DependencyGraph:
             self._url_node_ids[url].append(node_id)
         # If this is a redirection it will change the details of the node
         self.graph.add_node(
-            node_id, url=url, done=False, type=type_, origin=origin(url))
+            node_id, url=url, done=False, type=type_, origin=origin(url),
+            content_length=None,
+        )
 
     def _handle_response(self, msg):
         assert msg["method"] == "Network.responseReceived"
@@ -110,6 +120,12 @@ class _DependencyGraph:
         if node_id in self._ignored_requests:
             return
         self.graph.nodes[node_id]["done"] = True
+
+        size = _rget(
+            msg, ["params", "response", "headers", "content-length"], None
+        )
+        if size is not None:
+            self.graph.nodes[node_id]["content_length"] = int(size)
 
     def _find_node_by_url(self, url: str) -> Optional[str]:
         """Find the most recent node associated with a get request."""
@@ -225,7 +241,7 @@ def extract_graphs(fetch_output_generator) -> Iterator[nx.DiGraph]:
 
 def main(infile: List[str], prefix: str, verbose: bool):
     """Filter browser URL request logs and extract dependency graphs."""
-    common.init_logging(int(verbose) + 1)
+    common.init_logging(verbosity=int(verbose) + 1)
     _LOGGER.info("Running with arguments: %s.", locals())
 
     file_id = -1
