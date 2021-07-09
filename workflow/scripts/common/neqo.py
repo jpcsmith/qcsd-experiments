@@ -1,6 +1,5 @@
 """Wrapper to run neqo-client binary."""
 import os
-import re
 import logging
 import functools
 import contextlib
@@ -39,8 +38,12 @@ def run(
     neqo_exe: Optional[List[str]] = None,
     tcpdump_kw: Optional[Dict] = None,
     timeout: Optional[float] = None,
+    filter_server_address: bool = False,
 ) -> Tuple[subprocess.CompletedProcess, Optional[bytes]]:
     """Run neqo-client and capture the communication traffic."""
+    if filter_server_address and stdout != PIPE:
+        raise ValueError("'filter_neqo_ips' requires piped stdout")
+
     env = env or dict()
     tcpdump_kw = tcpdump_kw or dict()
     tcpdump_kw.setdefault("capture_filter", "udp")
@@ -69,15 +72,39 @@ def run(
             )
 
         pcap_bytes: Optional[bytes] = None
-        if result.returncode == 0 and pcap is not None:
+        if pcap is not None:
             # None is the only case in which we do not use the PCAP
             assert pcap == PIPE or isinstance(pcap, (str, Path))
-            pcap_bytes = common.pcap.embed_tls_keys(sniffer.pcap(), keylog)
+            pcap_bytes = sniffer.pcap()
+            assert pcap_bytes is not None
+
+            if Path(keylog).read_text().strip():
+                # Filtering must occur before embedding of the secrets, as
+                # tshark cannot write a PCAP with secrets
+                if filter_server_address:
+                    pcap_bytes = _filter_neqo_ips(pcap_bytes, result.stdout)
+                pcap_bytes = common.pcap.embed_tls_keys(pcap_bytes, keylog)
+
             if isinstance(pcap, (str, Path)):
                 Path(pcap).write_bytes(pcap_bytes)
                 pcap_bytes = None
 
     return (result, pcap_bytes)
+
+
+def _filter_neqo_ips(pcap, stdout) -> bytes:
+    if isinstance(stdout, bytes):
+        stdout = stdout.decode("utf-8")
+    (local, remote) = extract_endpoints(stdout)
+
+    dst_ver = "ipv6" if remote.ip.version == 6 else "ip"
+    # Filter to packets from the remote ip and local port
+    # Exclude the local IP as this may change depending on the vantage point
+    display_filter = (
+        f"{dst_ver}.addr=={remote.ip} and udp.port=={remote.port}"
+        f" and udp.port=={local.port}"
+    )
+    return common.pcap.filter_pcap(pcap, display_filter)
 
 
 def _run_neqo(
@@ -128,6 +155,16 @@ def _run_neqo(
     return subprocess.CompletedProcess(process.args, retcode, out, err)
 
 
+def _parse_endpoint(addr: str) -> Endpoint:
+    if addr[:3] in ["V4(", "V6("]:
+        addr = addr[3:].replace(")", "")
+    if addr.startswith("["):
+        addr = addr[1:].replace("]", "")
+
+    ipaddr, port = addr.rsplit(":", maxsplit=1)
+    return Endpoint(ip_address(ipaddr), int(port))
+
+
 def extract_endpoints(neqo_output: str) -> Tuple[Endpoint, Endpoint]:
     """Extract the endpoints from the log output."""
     conn_lines = [line for line in neqo_output.split("\n")
@@ -138,15 +175,6 @@ def extract_endpoints(neqo_output: str) -> Tuple[Endpoint, Endpoint]:
     if len(conn_lines) > 1:
         raise ValueError(f"Multiple connections in Neqo output: {conn_lines}.")
 
-    pattern = (r"(?:(?P<{end}ver>V4|V6)\()?"
-               r"\[?(?P<{end}ip>[.\d]+|[:\dA-Fa-f]+)\]?:(?P<{end}port>\d+)"
-               r"(?({end}ver)\))")
-    pattern = "{} -> {}".format(
-        pattern.format(end="l"), pattern.format(end="r"))
-    match = re.search(pattern, conn_lines[0])
-
-    if not match:
-        raise ValueError(f"Unable to parse connection line: {conn_lines[0]}")
-
-    return (Endpoint(ip_address(match["lip"]), int(match["lport"])),
-            Endpoint(ip_address(match["rip"]), int(match["rport"])))
+    # Split the line into the separate IPs
+    laddr, _, raddr = conn_lines[0].split(" ")[3:]
+    return _parse_endpoint(laddr), _parse_endpoint(raddr)

@@ -73,6 +73,8 @@ class _DependencyGraph:
                 self._handle_request(msg)
             elif msg["method"] == "Network.responseReceived":
                 self._handle_response(msg)
+            elif msg["method"] == "Network.dataReceived":
+                self._handle_data(msg)
             else:
                 continue
 
@@ -111,8 +113,20 @@ class _DependencyGraph:
         # If this is a redirection it will change the details of the node
         self.graph.add_node(
             node_id, url=url, done=False, type=type_, origin=origin(url),
-            content_length=None,
+            content_length=None, data_length=0,
         )
+
+    def _handle_data(self, msg):
+        assert msg["method"] == "Network.dataReceived"
+        node_id = msg["params"]["requestId"]
+        if (
+            node_id in self._ignored_requests
+            or node_id not in self.graph.nodes
+        ):
+            return
+
+        self.graph.nodes[node_id]["data_length"] += _rget(
+            msg, ["params", "dataLength"], 0)
 
     def _handle_response(self, msg):
         assert msg["method"] == "Network.responseReceived"

@@ -1,6 +1,7 @@
+"""Tests for the neqo.py module."""
 from ipaddress import IPv4Address, IPv6Address
 
-from neqo_capture_client import extract_endpoints
+from common.neqo import extract_endpoints
 
 
 def test_extract_endpoints_ipv4():
@@ -51,3 +52,19 @@ def test_extract_endpoints_ipv6():
     assert local == (
         IPv6Address("2001:1711:fa55:b9d0:4926:da7d:8e50:57bb"), 51957)
     assert remote == (IPv6Address("2a00:1450:400a:800::2004"), 443)
+
+
+def test_extract_endpoints_ipv6_alt():
+    """It should extract IPv6 endpoints."""
+    text = "\n".join([
+        ("H3 Client connecting: "
+         "[2001:1711:fa55:b9d0:4926:da7d:8e50:57bb]:51957 "
+         "-> [2606:4700:7::a29f:9904]:443"),
+        "Cannot create stream Err(Unavailable)",
+        "Cannot create dummy stream Err(Unavailable)",
+    ])
+
+    (local, remote) = extract_endpoints(text)
+    assert local == (
+        IPv6Address("2001:1711:fa55:b9d0:4926:da7d:8e50:57bb"), 51957)
+    assert remote == (IPv6Address("2606:4700:7::a29f:9904"), 443)

@@ -42,7 +42,7 @@ defence_defaults:
   tamaraw_config: &tamaraw-default
     rate_in: 5
     rate_out: 20
-    pad_multiple: 100
+    pad_multiple: 300
     packet_size: 750
 
 experiment:
@@ -58,6 +58,7 @@ experiment:
   delay_vs_drop:
     n_monitored: 20
     n_instances: 100
+    n_unmonitored: 1000
     tamaraw: *tamaraw-default
     splits:
       n_folds: 5

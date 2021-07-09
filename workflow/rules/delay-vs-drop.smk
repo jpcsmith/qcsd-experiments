@@ -29,6 +29,7 @@ rule delay_vs_drop__collect_tamaraw:
         ],
         n_monitored=delay_vs_drop_config["n_monitored"],
         n_instances=delay_vs_drop_config["n_instances"],
+        n_unmonitored=delay_vs_drop_config["n_unmonitored"],
     script:
         "../scripts/run_collection.py"
 
@@ -37,13 +38,71 @@ rule delay_vs_drop__dataset:
     input:
         "results/delay-vs-drop/{defence}/{mode}/dataset/"
     output:
-        temp("results/delay-vs-drop/{defence}/{mode}/dataset{sim_suffix}.h5")
+        "results/delay-vs-drop/{defence}/{mode}/dataset{sim_suffix}.h5"
     params:
-        n_monitored=delay_vs_drop_config["n_monitored"],
+        n_monitored=1,
+        n_unmonitored=1000,
         n_instances=delay_vs_drop_config["n_instances"],
         simulate=lambda w: bool(w["sim_suffix"]),
     script:
         "../scripts/create_dataset.py"
+
+
+rule ml_eval__filtered_dataset:
+    """Remove packets below the configured threshold from the monitored and
+    unmonitored traces."""
+    input:
+        "results/delay-vs-drop/{defence}/{mode}/dataset.h5"
+    output:
+        "results/delay-vs-drop/{defence}/{mode}/dataset-filtered.h5"
+    params:
+        size=150,
+    shell:
+        "workflow/scripts/remove-small-packets {params.size} {input} {output}"
+
+
+rule delay_vs_drop2__features:
+    input:
+        rules.ml_eval__filtered_dataset.output
+    output:
+        "results/delay-vs-drop/{defence}/{mode}/features-filtered.h5"
+    log:
+        "results/delay-vs-drop/{defence}/{mode}/features-filtered.log"
+    shell:
+        "workflow/scripts/extract-features {input} {output} 2> {log}"
+
+
+rule delay_vs_drop2__splits:
+    """Create train-test-validation splits of the dataset."""
+    input:
+        rules.delay_vs_drop2__features.output
+    output:
+        "results/delay-vs-drop/{defence}/{mode}/predict-filtered/split-0.json"
+    params:
+        seed=delay_vs_drop_config["splits"]["seed"],
+        n_folds=delay_vs_drop_config["splits"]["n_folds"],
+        validation_size=delay_vs_drop_config["splits"]["validation_size"]
+    script:
+        "../scripts/split_dataset.py"
+
+
+rule delay_vs_drop2__predictions:
+    input:
+        dataset=rules.delay_vs_drop2__features.output,
+        splits=rules.delay_vs_drop2__splits.output,
+    output:
+        "results/delay-vs-drop/{defence}/{mode}/predict-filtered/{classifier}-0.csv"
+    log:
+        "results/delay-vs-drop/{defence}/{mode}/predict-filtered/{classifier}-0.log"
+    params:
+        classifier="{classifier}",
+        classifier_args=lambda w: ("--classifier-args n_jobs=4,feature_set=kfp"
+                                   if w["classifier"] == "kfp" else "")
+    threads:
+        lambda w: min(workflow.cores, 16) if w["classifier"] != "kfp" else 4
+    shell:
+        "workflow/scripts/evaluate-classifier {params.classifier_args}"
+        " {params.classifier} {input.dataset} {input.splits} {output} 2> {log}"
 
 
 rule delay_vs_drop__features:

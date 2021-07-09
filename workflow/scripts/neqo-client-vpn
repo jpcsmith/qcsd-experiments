@@ -44,5 +44,10 @@ DOCKER_RUN_ARGS+=(--memory "1.5g" --memory-reservation 1g --cpus 2)
 # Forward the RUST_LOG and keylog environment variable
 DOCKER_RUN_ARGS+=(--env "RUST_LOG=${RUST_LOG}" --env "SSLKEYLOGFILE=${SSLKEYLOGFILE}")
 
-exec docker run "${DOCKER_RUN_ARGS[@]}" --entrypoint neqo-client wg-client "$@"
-# exec docker run "${DOCKER_RUN_ARGS[@]}" --entrypoint bash -t wg-client "$@"
+if [[ -n "${NCV_TEST}" ]]; then
+    exec docker run "${DOCKER_RUN_ARGS[@]}" --entrypoint wget wg-client -q --spider http://google.com
+elif [[ -n "${NCV_BASH}" ]]; then
+    exec docker run "${DOCKER_RUN_ARGS[@]}" --entrypoint bash -t wg-client "$@"
+else
+    exec docker run "${DOCKER_RUN_ARGS[@]}" --entrypoint neqo-client wg-client "$@"
+fi

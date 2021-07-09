@@ -49,6 +49,7 @@
       file: path={{ wg_resources }} state=directory
 
     - name: Construct the region/client IDs
+      tags: always
       ansible.builtin.set_fact:
         client_list: "{{ client_list | default([]) + [{
           'region_id': item.0,
@@ -84,4 +85,10 @@
         privileged: true
         detach: true
         dns_servers: [8.8.8.8, 9.9.9.9]
+      loop: "{{ client_list | flatten(levels=1) }}"
+
+    - name: Check Wireguard client connectivity
+      tags: wg-test
+      shell: "NCV_TEST=1 ../workflow/scripts/neqo-client-vpn {{item.region_id}} \
+              {{item.client_id}}"
       loop: "{{ client_list | flatten(levels=1) }}"

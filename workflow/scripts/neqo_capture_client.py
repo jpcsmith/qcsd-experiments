@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Usage: module [options] -- [NEQO_ARGS]...
+"""Usage: neqo [options] -- [NEQO_ARGS]...
 
 Run neqo-client with the specified arguments provided to NEQO_ARGS,
 and capture and filter the trace to the IP and ports specified in
@@ -11,10 +11,6 @@ Options:
     --pcap-file filename
         Write the decrypted and filtered pcap data in pcapng format to
         filename.
-    --ignore-errors
-        Do not raise an exception when neqo-client returns a non-zero
-        exit status.  Instead, append the string ">>> FAILURE <<<" to
-        neqo's standard output and ">>> SUCCESS <<<" otherwise.
 """
 import os
 import re
@@ -27,9 +23,7 @@ from dataclasses import dataclass
 from typing import Optional, Union, Tuple, NamedTuple
 from ipaddress import IPv4Address, IPv6Address, ip_address
 
-from lab.sniffer import TCPDumpPacketSniffer
-
-from common import doceasy
+from common import doceasy, neqo
 
 
 @contextlib.contextmanager

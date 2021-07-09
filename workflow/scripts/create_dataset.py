@@ -15,6 +15,7 @@ def main(
     *,
     n_monitored: int,
     n_instances: int,
+    n_unmonitored: int,
     simulate: bool,
     n_regions: int,
 ):
@@ -26,16 +27,12 @@ def main(
     """
     common.init_logging()
 
-    # TODO: need to do for unmonitored
-    n_unmonitored = 0
-
     sample_dirs = [p for p in Path(input_).iterdir() if p.is_dir()]
     sample_dirs.sort(key=lambda p: int(p.stem))
 
     if len(sample_dirs) < n_monitored + n_unmonitored:
         raise ValueError(f"Insufficient samples: {len(sample_dirs)}")
-    if len(sample_dirs) > n_monitored + n_unmonitored:
-        raise ValueError(f"Too many sample directories: {len(sample_dirs)}")
+    sample_dirs = sample_dirs[:(n_monitored + n_unmonitored)]
 
     # TODO: Need to handle the FRONT defence
     assert isinstance(simulate, bool), "simulate not boolean?"
@@ -46,6 +43,7 @@ def main(
     sizes = np.full(n_rows, None, dtype=object)
     timestamps = np.full(n_rows, None, dtype=object)
 
+    index = 0
     for label, sample_path in enumerate(sample_dirs[:n_monitored]):
         # Tterator that takes one sample from each region before taking
         # the second sample from a region. This is akin to how we
@@ -60,6 +58,26 @@ def main(
             sample = trace.from_csv(sample_path/f"{region_id}_{id_}"/trace_file)
             sizes[index] = sample["size"]
             timestamps[index] = sample["time"]
+
+    region_index = 0
+    for sample_path in sample_dirs[n_monitored:(n_monitored + n_unmonitored)]:
+        paths = [(region_id, sample_path/f"{region_id}_0"/trace_file)
+                 for region_id in range(n_regions)]
+        paths = [(region_id, p) for (region_id, p) in paths if p.is_file()]
+        assert paths, "no samples in directory?"
+
+        # Select a path from the list, cycling among the used region if there
+        # are more than one regions, otherwise returning an inde in the paths
+        # list
+        region_id, path = paths[(region_index % n_regions) % len(paths)]
+        region_index += 1
+
+        index = index + 1
+        labels[index] = (-1, region_id, 0)
+
+        sample = trace.from_csv(path)
+        sizes[index] = sample["size"]
+        timestamps[index] = sample["time"]
     assert index == (n_rows - 1), "not enough samples"
 
     order = labels.argsort(order=["class", "region"])
@@ -80,6 +98,7 @@ if __name__ == "__main__":
         input_=str(snakemake.input[0]),
         output=str(snakemake.output[0]),
         n_monitored=snakemake.params["n_monitored"],
+        n_unmonitored=snakemake.params["n_unmonitored"],
         n_instances=snakemake.params["n_instances"],
         simulate=snakemake.params["simulate"],
         n_regions=snakemake.config["wireguard"]["n_regions"],

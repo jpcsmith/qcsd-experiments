@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+"""Usage: neqo-test [options] -- [NEQO_ARGS]...
+
+Run neqo-client with the provided arguments and record the filtered PCAP
+and trace.
+
+Options:
+    --pcap-file <file>
+        Write the PCAPNG to the specified path [default: capture.pcapng].
+    --trace-file <file>
+        Write the trace to the specified path [default: trace.csv].
+    --plot-file <file>
+        Plot the trace to the specified path [default: trace.png].
+"""
+import sys
+import pathlib
+import subprocess
+
+import pandas as pd
+import seaborn as sns
+from matplotlib import pyplot as plt
+from lab import tracev2
+
+import common
+from common import neqo, doceasy
+
+
+def main(neqo_args, pcap_file: str, trace_file: str, plot_file: str):
+    """Run neqo collection."""
+    common.init_logging()
+    (result, pcap) = neqo.run(
+        neqo_args,
+        check=False,
+        stdout=subprocess.PIPE,
+        pcap=subprocess.PIPE,
+        env={"RUST_LOG": "neqo=trace"},
+        tcpdump_kw={"capture_filter": "udp port 443"},
+        filter_server_address=True,
+    )
+    sys.stdout.buffer.write(result.stdout)
+
+    assert pcap is not None
+    pathlib.Path(pcap_file).write_bytes(pcap)
+
+    trace_data = tracev2.from_pcap(pcap, server_port=443)
+    tracev2.to_csv(trace_file, trace_data)
+
+    fig, axes = plt.subplots()
+    sns.scatterplot(data=pd.DataFrame(trace_data), x="time", y="size", ax=axes,
+                    marker='.', edgecolor="green", facecolor="none")
+    try:
+        index = neqo_args.index("--defence-event-log")
+    except ValueError:
+        pass
+    else:
+        trace_data = tracev2.from_csv(neqo_args[index + 1])
+        sns.scatterplot(data=pd.DataFrame(trace_data), x="time", y="size",
+                        ax=axes, marker='.', edgecolor="blue", facecolor="none")
+    fig.savefig(plot_file, bbox_inches="tight", dpi=150)
+
+    sys.exit(result.returncode)
+
+
+if __name__ == "__main__":
+    main(**doceasy.doceasy(__doc__, doceasy.Schema({
+        "NEQO_ARGS": [str],
+        "--pcap-file": str,
+        "--trace-file": str,
+        "--plot-file": str,
+    }, ignore_extra_keys=True)))
