@@ -45,17 +45,21 @@ def main(neqo_args, pcap_file: str, trace_file: str, plot_file: str):
     trace_data = tracev2.from_pcap(pcap, server_port=443)
     tracev2.to_csv(trace_file, trace_data)
 
-    fig, axes = plt.subplots()
-    sns.scatterplot(data=pd.DataFrame(trace_data), x="time", y="size", ax=axes,
-                    marker='.', edgecolor="green", facecolor="none")
+    fig, axes = plt.subplots(3, 1, sharex=True, sharey=True)
+    for i in (0, 2):
+        sns.scatterplot(data=pd.DataFrame(trace_data), x="time", y="size",
+                        ax=axes[i], marker='.', edgecolor="green",
+                        facecolor="none")
     try:
         index = neqo_args.index("--defence-event-log")
     except ValueError:
         pass
     else:
         trace_data = tracev2.from_csv(neqo_args[index + 1])
-        sns.scatterplot(data=pd.DataFrame(trace_data), x="time", y="size",
-                        ax=axes, marker='.', edgecolor="blue", facecolor="none")
+        for i in (1, 2):
+            sns.scatterplot(data=pd.DataFrame(trace_data), x="time", y="size",
+                            ax=axes[i], marker='.', edgecolor="blue",
+                            facecolor="none")
     fig.savefig(plot_file, bbox_inches="tight", dpi=150)
 
     sys.exit(result.returncode)

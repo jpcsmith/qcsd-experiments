@@ -29,7 +29,11 @@ def collect_with_args(
     neqo_args = neqo_args + [
         "--url-dependencies-from", str(input_file),
     ]
-    if "tamaraw" in neqo_args or "front" in neqo_args:
+    if (
+        "tamaraw" in neqo_args
+        or "front" in neqo_args
+        or "schedule" in neqo_args
+    ):
         neqo_args = neqo_args + [
             "--defence-event-log", str(output_dir / "schedule.csv"),
         ]

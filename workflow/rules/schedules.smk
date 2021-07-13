@@ -1,5 +1,5 @@
 wildcard_constraints:
-    mbps="\d+",
+    mbps="[\d\.]+",
     duration="\d+",
     interval="\d+",
 
@@ -13,7 +13,7 @@ rule schedule_constant_rate:
         duration_ms = int(wildcards.duration) * 1000
         interval_ms = int(wildcards.interval)
         # Burst size in bytes per interval_ms
-        burst_size = int(int(wildcards.mbps) * 1e3 * interval_ms // 8)
+        burst_size = int(float(wildcards.mbps) * 1e3 * interval_ms // 8)
 
         with open(output[0], mode="w") as outfile:
             for timestamp in range(interval_ms, duration_ms, interval_ms):
