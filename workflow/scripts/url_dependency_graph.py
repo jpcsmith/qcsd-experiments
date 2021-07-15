@@ -9,6 +9,10 @@ CSV adjancency list of the pairs (dependency URL, URL), and are written
 to the files PREFIX000.csv, PREFIX001.csv ...
 
 Options:
+    --no-origin-filter
+        Disable filtering by the web-page origin, leaving graph nodes
+        from all origins.
+
     -v, --verbose
         Output more log messages.
 """
@@ -203,7 +207,9 @@ class _DependencyGraph:
                         request["url"], stack_frame["url"])
 
 
-def extract_graphs(fetch_output_generator) -> Iterator[nx.DiGraph]:
+def extract_graphs(
+    fetch_output_generator, use_origin: bool = True
+) -> Iterator[nx.DiGraph]:
     """Filter and generate non-empty graphs from the input
     generated of fetch results.
     """
@@ -231,7 +237,8 @@ def extract_graphs(fetch_output_generator) -> Iterator[nx.DiGraph]:
             continue
 
         try:
-            graph = _DependencyGraph(result, origin(url))
+            graph = _DependencyGraph(
+                result, origin(url) if use_origin else None)
         except InvalidGraphError as err:
             _LOGGER.debug("Dropping %r: %s", url, err)
             dropped_urls["empty"][url] += 1
@@ -253,7 +260,7 @@ def extract_graphs(fetch_output_generator) -> Iterator[nx.DiGraph]:
         _LOGGER.info("Dropped %s urls: %d", type_, sum(counters.values()))
 
 
-def main(infile: List[str], prefix: str, verbose: bool):
+def main(infile: List[str], prefix: str, verbose: bool, no_origin_filter: bool):
     """Filter browser URL request logs and extract dependency graphs."""
     common.init_logging(verbosity=int(verbose) + 1)
     _LOGGER.info("Running with arguments: %s.", locals())
@@ -263,7 +270,9 @@ def main(infile: List[str], prefix: str, verbose: bool):
             as json_lines:
         results = (json.loads(line) for line in json_lines)
 
-        for file_id, graph in enumerate(extract_graphs(results)):
+        for file_id, graph in enumerate(
+            extract_graphs(results, use_origin=not no_origin_filter)
+        ):
             path = Path(f"{prefix}{file_id:04d}.json")
             if not path.is_file():
                 path.write_text(graph.to_json())
@@ -274,7 +283,8 @@ def main(infile: List[str], prefix: str, verbose: bool):
 
 if __name__ == "__main__":
     main(**doceasy.doceasy(__doc__, {
-        "INFILE": [str],
         "PREFIX": doceasy.Or(str, doceasy.Use(lambda _: "x")),
+        "INFILE": [str],
+        "--no-origin-filter": bool,
         "--verbose": bool,
     }))
