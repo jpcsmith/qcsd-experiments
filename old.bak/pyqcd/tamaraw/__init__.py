@@ -1,1 +1,0 @@
-"""Module implementing Tamara defence"""
