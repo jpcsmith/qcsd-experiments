@@ -9,17 +9,18 @@ configfile: "config/config.yaml"
 wildcard_constraints:
     #: A filename without extension or path
     basename="[a-zA-Z0-9_-]+",
-    defence="front|tamaraw|control"
+    defence="front|tamaraw|undefended",
 
 
 include: "rules/alexa.smk"
 include: "rules/schedules.smk"
 include: "rules/version-scan.smk"
 include: "rules/webpage-graphs.smk"
-include: "rules/delay-vs-drop.smk"
+include: "rules/shaping-eval.smk"
+# include: "rules/delay-vs-drop.smk"
 # include: "rules/excess-msd.smk"
 # include: "rules/front-eval.smk"
 # include: "rules/tamaraw-eval.smk"
 # include: "rules/ml-eval-dataset.smk"
 # include: "rules/ml-eval.smk"
-include: "rules/debug.smk"
+# include: "rules/debug.smk"

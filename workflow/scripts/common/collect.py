@@ -21,12 +21,6 @@ import common
 TargetFn = Callable[[Path, Path, int, int], bool]
 
 
-class EntireBatchFailedException(BaseException):
-    """Raised when an entire batch fails, signalling that something is
-    probably wrong with the setup.
-    """
-
-
 def _output_directory(
     input_: Path, output_dir: Path, region_id: int, region_sample: int
 ) -> Path:
@@ -345,8 +339,6 @@ class Collector:
                 has_a_success = True
             else:
                 trackers[task.input_file].failure(task.region_id)
-        if not has_a_success:
-            raise EntireBatchFailedException()
         return True
 
     def _close(self):

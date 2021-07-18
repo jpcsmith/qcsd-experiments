@@ -1,51 +1,78 @@
 """Calculate padding-only scores.
 """
-import pathlib
 import logging
 import itertools
+import functools
+from pathlib import Path
+import multiprocessing
+import multiprocessing.pool
+from typing import Sequence, Dict, Optional
 
-from fastdtw import fastdtw
-# import pyinform
 import numpy as np
 import pandas as pd
-from scipy.stats import pearsonr
-from scipy.spatial.distance import euclidean  # , cosine
+import tslearn.metrics
+from scipy.stats import pearsonr, spearmanr
+from scipy.spatial.distance import euclidean
 
 import common
-from common import timeseries, neqo
+from common import timeseries
 
 _LOGGER = logging.getLogger(__name__)
-COLUMNS = [
-    "sample", "rate", "dir", "pearsonr", "euclidean", "dtw",
-    "cosine", "mutual_info", "scaled_euclidean", "scaled_dtw",
-]
 
 
 def main(
-    input_, output, *, sample_id, pad_only: bool, ts_offset, resample_rates,
-    filter_below=0,
+    input_,
+    output, *,
+    defence: str,
+    ts_offset: Dict[str, int],
+    resample_rates: Sequence["str"],
+    lcss_eps: int,
+    filter_below: Sequence[int] = (),
+    jobs: Optional[int] = None,
 ):
-    """Score how close a padding-only defended time series is to
-    padding schedule.
+    """Score how close a defended time series is to the theoretical.
     """
     common.init_logging()
     _LOGGER.info("Using parameters: %s", locals())
 
-    if (
-        not neqo.is_run_successful(input_["control"])
-        or not neqo.is_run_almost_successful(input_["defended"], 10)
-    ):
-        _LOGGER.info("Skipping as run was unsuccessful")
-        pd.DataFrame.from_records([{
-            "sample": sample_id, "rate": "", "dir": "",
-            "pearsonr": np.NaN, "scaled_euclidean": np.NaN,
-            "scaled_dtw": np.NaN,
-        }]).to_csv(output[0], index=False)
-        return
+    directories = sorted([x.parent for x in Path(input_).glob("**/defended/")])
+    _LOGGER.info("Found %d samples", len(directories))
 
-    schedule_ts = timeseries.from_csv(input_["schedule"])
-    control_ts = timeseries.from_pcap(input_["control_pcap"])
-    defended_ts = timeseries.from_pcap(input_["defended_pcap"])
+    jobs = jobs or (multiprocessing.cpu_count() or 4)
+    func = functools.partial(
+        _calculate_score, defence=defence, ts_offset=ts_offset,
+        resample_rates=resample_rates, filter_below=filter_below,
+        lcss_eps=lcss_eps,
+    )
+
+    if jobs > 1:
+        chunksize = max(len(directories) // (jobs * 2), 1)
+        with multiprocessing.pool.Pool(jobs) as pool:
+            scores = list(
+                pool.imap_unordered(func, directories, chunksize=chunksize)
+            )
+    else:
+        # Run in the main process
+        scores = list(map(func, directories))
+    _LOGGER.info("Score calculation complete")
+
+    pd.DataFrame.from_records(
+        itertools.chain.from_iterable(scores)
+    ).to_csv(output, header=True, index=False)
+
+
+def _calculate_score(
+    dir_, *, defence: str, ts_offset, resample_rates, filter_below, lcss_eps,
+):
+    """Score how close a padding-only defended time series is to
+    padding schedule.
+    """
+    assert defence in ("front", "tamaraw")
+    pad_only = (defence == "front")
+
+    schedule_ts = timeseries.from_csv(dir_ / "defended" / "schedule.csv")
+    defended_ts = timeseries.from_csv(dir_ / "defended" / "trace.csv")
+    control_ts = timeseries.from_csv(dir_ / "undefended" / "trace.csv")
 
     offsets = range(ts_offset["min"], ts_offset["max"], ts_offset["inc"])
     simulated_ts = simulate_with_lag(
@@ -53,47 +80,39 @@ def main(
     )
 
     results = []
-    for rate, direction in itertools.product(resample_rates, ("in", "out")):
+    for rate, direction, min_pkt_size in itertools.product(
+        resample_rates, ("in", "out"), filter_below
+    ):
         series = pd.DataFrame({
             "a": timeseries.resample(
-                _filter(defended_ts[direction], filter_below), rate
-            ),
+                _filter(defended_ts[direction], min_pkt_size), rate),
             "b": timeseries.resample(
-                _filter(simulated_ts[direction], filter_below), rate
-            ),
+                _filter(simulated_ts[direction], min_pkt_size), rate),
             "c": timeseries.resample(
-                _filter(control_ts[direction], filter_below), rate
-            ),
+                _filter(control_ts[direction], min_pkt_size), rate),
         }).fillna(0)
+
         _LOGGER.debug("Series length at rate %s: %d", rate, len(series))
         _LOGGER.debug("Series summary at rate %s: %s", rate, series.describe())
 
-        # "sample", "rate", "dir", "pearsonr", "euclidean", "dtw",
-        # "cosine", "mutual_info", "scaled_euclidean", "scaled_dtw",
-        # try:
-        #     mutual_info = pyinform.mutualinfo.mutual_info(
-        #         series["a"], series["b"]
-        #     )
-        # except pyinform.error.InformError as err:
-        #     mutual_info = np.NaN
-        #     _LOGGER.error("Unable to compute mutual info: %s", err)
-
         results.append({
-            "sample": sample_id,  # Sample name
+            "sample": str(dir_),  # Sample name
             "rate": rate,
             "dir": direction,
+            "min_pkt_size": min_pkt_size,
             "pearsonr": pearsonr(series["a"], series["b"])[0],
-            # euclidean(series["a"], series["b"]),
-            # fastdtw.fastdtw(series["a"], series["b"])[0],
-            # cosine(series["a"], series["b"]),
-            # mutual_info,
-            "scaled_euclidean": (euclidean(series["a"], series["b"])
-                                 / euclidean(series["b"], series["c"])),
-            "scaled_dtw": (fastdtw(series["a"], series["b"])[0]
-                           / fastdtw(series["b"], series["c"])[0]),
+            "spearmanr": spearmanr(series["a"], series["b"])[0],
+            "lcss": tslearn.metrics.lcss(
+                series["a"], series["b"], eps=lcss_eps),
+            "euclidean": _scaled(
+                euclidean, series["b"], series["a"], series["c"])
         })
+    return results
 
-    pd.DataFrame.from_records(results).to_csv(output[0], index=False)
+
+def _scaled(metric_fn, series_a, series_b, series_c) -> float:
+    reference_point = metric_fn(series_a, series_c)
+    return (reference_point - metric_fn(series_a, series_b)) / reference_point
 
 
 def _filter(column, below):
@@ -102,7 +121,7 @@ def _filter(column, below):
 
 
 def simulate_with_lag(
-    control, schedule, defended, offsets, rate="5ms", pad_only: bool = True
+    control, schedule, defended, offsets, pad_only: bool, rate="5ms",
 ):
     """Find the best offset such that the simulated trace formed by
     combining the control and schedule where the schedule is lagged
@@ -142,7 +161,7 @@ def simulate_with_lag(
 
     assert best_simulated is not None
 
-    _LOGGER.info("Using an incoming offset of %d ms", best_offset)
+    _LOGGER.debug("Using an incoming offset of %d ms", best_offset)
     return pd.DataFrame({
         # Take the sum of any given time instance to handle rare duplicates
         "in": best_simulated.groupby("time").sum(),
@@ -151,4 +170,5 @@ def simulate_with_lag(
 
 
 if __name__ == "__main__":
-    main(snakemake.input, snakemake.output, **snakemake.params) # type: ignore # noqa # pylint: disable=E0602
+    main(str(snakemake.input[0]), str(snakemake.output[0]), **snakemake.params,
+         jobs=snakemake.threads)
