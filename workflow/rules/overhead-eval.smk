@@ -8,7 +8,8 @@ rule overhead_eval__calculate:
     threads:
         workflow.cores
     params:
-        is_pad_only=lambda w: w["defence"] == "front"
+        defence="{defence}",
+        tamaraw_config=config["experiment"]["shaping_eval"]["tamaraw"]
     script:
         "../scripts/calculate_overhead.py"
 

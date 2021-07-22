@@ -33,7 +33,7 @@ rule shaping_eval__score:
         ts_offset=shaping_config["scores"]["ts_offset"],
         resample_rates=shaping_config["scores"]["resample_rates"],
         filter_below=shaping_config["scores"]["min_pkt_size"],
-        lcss_eps=shaping_config["scores"]["lcss_eps"],
+        lcss_eps=lambda w: shaping_config["scores"]["lcss_eps"][w["defence"]]
     threads:
         max(workflow.global_resources.get("mem_mb", 1000) // 30_000, 1)
     resources:

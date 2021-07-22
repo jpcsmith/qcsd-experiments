@@ -56,8 +56,8 @@ experiment:
     scores:
       ts_offset: {min: 0, max: 200, inc: 5}
       resample_rates: ["1ms", "5ms", "25ms", "50ms"]
-      lcss_eps: 150
-      min_pkt_size: [0, 150]
+      lcss_eps: {"front": 150, "tamaraw": 250}
+      min_pkt_size: [0]
     front: *front-default
     tamaraw: *tamaraw-default
 

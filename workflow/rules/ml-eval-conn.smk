@@ -110,11 +110,36 @@ rule ml_eval_conn__predictions:
         " {params.classifier} {input.dataset} {input.splits} {output} 2> {log}"
 
 
+rule ml_eval_conn__plot:
+    input:
+        expand([
+            "results/ml-eval-conn/{{defence}}/{{filtered}}predict/{classifier}-0.csv",
+            "results/ml-eval-conn/simulated-{{defence}}/{{filtered}}predict/{classifier}-0.csv",
+            "results/ml-eval-conn/undefended/{{filtered}}predict/{classifier}-0.csv",
+        ], classifier=ml_ec_config["classifiers"])
+    output:
+        "results/plots/{filtered}ml-eval-conn-{defence}.png"
+    wildcard_constraints:
+        filtered="(filtered/)?"
+    params:
+        with_legend=lambda w: w["defence"] == "tamaraw"
+    notebook:
+        "../notebooks/result-analysis-curve.ipynb"
+
+
 rule ml_eval_conn__all:
     input:
-        [f"results/ml-eval-conn/{defence}/{filtered}predict/{classifier}-0.csv"
-         for defence in ["tamaraw", "front", "undefended", "simulated-tamaraw",
-                         "simulated-front"]
-         for classifier in ml_ec_config["classifiers"]
-         for filtered in ["filtered/", ""]
+        [f"results/plots/{filtered}ml-eval-conn-{defence}.png"
+         for defence in ["tamaraw", "front"]
+         # for filtered in ["filtered/", ""]
+         for filtered in [""]
         ]
+    # input:
+    #     [f"results/ml-eval-conn/{defence}/{filtered}predict/{classifier}-0.csv"
+    #      for defence in ["tamaraw", "front", "undefended", "simulated-tamaraw",
+    #                      "simulated-front"]
+    #      for classifier in ml_ec_config["classifiers"]
+    #      for filtered in ["filtered/", ""]
+    #     ]
+
+

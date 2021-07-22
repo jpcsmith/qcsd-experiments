@@ -27,9 +27,6 @@ def main(front: str, tamaraw: str, output: str):
             table.write("\n")
             for setting in ["Defended", "Simulated"]:
                 table.write(r"\quad %s" % setting)
-                if overhead == "Latency" and setting == "Simulated":
-                    table.write(r" & $0.00$ & $-$ \\" + "\n")
-                    continue
                 for defence in ["front", "tamaraw"]:
                     median = data["50%"][defence][overhead][setting]
                     iqr1 = data["25%"][defence][overhead][setting]
@@ -37,7 +34,10 @@ def main(front: str, tamaraw: str, output: str):
                     table.write(f" &${median:.2f}$ (${iqr1:.2f} - {iqr3:.2f}$)")
                 table.write(r" \\" + "\n")
         table.write("\\bottomrule\n\\end{tabular}\n")
-
+        with pd.option_context('display.max_colwidth', None):
+            table.write(textwrap.indent(
+                data.drop(columns=["count", "mean", "std", "min", "max"]).to_csv(),
+                "% "))
 
 if __name__ == "__main__":
     snakemake = globals().get("snakemake", None)
