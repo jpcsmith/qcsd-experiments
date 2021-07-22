@@ -1,5 +1,6 @@
 """Collect a trace with the provided tamaraw arguments."""
 # pylint: disable=too-many-arguments
+import hashlib
 import logging
 import functools
 import subprocess
@@ -27,6 +28,7 @@ def collect_with_args(
     """Collect a trace using NEQO and return True iff it was successful."""
     #: Copy the args, since it is shared among all method instances
     neqo_args = neqo_args + [
+        "--header", "user-agent", config["user_agent"],
         "--url-dependencies-from", str(input_file),
     ]
     if (
@@ -34,9 +36,13 @@ def collect_with_args(
         or "front" in neqo_args
         or "schedule" in neqo_args
     ):
-        neqo_args = neqo_args + [
-            "--defence-event-log", str(output_dir / "schedule.csv"),
-        ]
+        neqo_args += ["--defence-event-log", str(output_dir / "schedule.csv")]
+
+    if "front" in neqo_args:
+        # Take a 4 byte integer from the output directory
+        dir_bytes = str(output_dir).encode('utf-8')
+        seed = int(hashlib.sha256(dir_bytes).hexdigest(), 16) & 0xffffffff
+        neqo_args += ["--defence-seed", str(seed)]
 
     client_port = config["wireguard"]["client_ports"][region_id][client_id]
     interface = config["wireguard"]["interface"]
@@ -82,11 +88,12 @@ def main(
     n_monitored: int,
     n_unmonitored: int = 0,
     max_failures: int = 3,
-    timeout: float = 180,
+    timeout: float = 120,
 ):
     """Collect all the samples for the speicified arguments."""
     common.init_logging(name_thread=True, verbose=True)
 
+    neqo_args = [str(x) for x in neqo_args]
     n_regions = config["wireguard"]["n_regions"]
     n_clients_per_region = config["wireguard"]["n_clients_per_region"]
 

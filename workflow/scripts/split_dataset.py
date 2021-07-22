@@ -23,7 +23,7 @@ def main(
         labels = np.asarray(h5in["/labels"]["class"])
 
     rng = np.random.RandomState(seed)
-    splitter = StratifiedKFold(n_folds)
+    splitter = StratifiedKFold(n_folds, shuffle=True, random_state=rng)
 
     for (train_val_idx, test_idx), outfile in zip(
         splitter.split(np.zeros_like(labels), labels),

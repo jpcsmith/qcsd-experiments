@@ -1,31 +1,6 @@
 shaping_config = config["experiment"]["shaping_eval"]
 
 
-def build_neqo_args(exp_config):
-    def _builder(wildcards):
-        if wildcards["defence"] == "front":
-            args = exp_config["front"]
-            return [
-                "--defence", "front",
-                "--defence-packet-size", args["packet_size"],
-                "--front-max-client-pkts", args["max_client_packets"],
-                "--front-max-server-pkts", args["max_server_packets"],
-                "--front-peak-max", args["peak_maximum"],
-                "--front-peak-min", args["peak_minimum"],
-            ]
-        if wildcards["defence"] == "tamaraw":
-            args = exp_config["tamaraw"]
-            return [
-                "--defence", "tamaraw",
-                "--defence-packet-size", args["packet_size"],
-                "--tamaraw-rate-in", args["rate_in"],
-                "--tamaraw-rate-out", args["rate_out"],
-                "--tamaraw-modulo", args["packet_multiple"],
-            ]
-        raise ValueError("Unsupported defence: %r", wildcards["defence"])
-    return _builder
-
-
 rule shaping_eval__collect:
     """Collect a control and defended samples for a given defence."""
     input:
@@ -60,9 +35,9 @@ rule shaping_eval__score:
         filter_below=shaping_config["scores"]["min_pkt_size"],
         lcss_eps=shaping_config["scores"]["lcss_eps"],
     threads:
-        max(workflow.global_resources.get("mem_mb", 1000) // 10_000, 2)
+        max(workflow.global_resources.get("mem_mb", 1000) // 30_000, 1)
     resources:
-        mem_mb=lambda w, input, threads: threads * 10_000
+        mem_mb=lambda w, input, threads: threads * 30_000
     script:
         "../scripts/calculate_score.py"
 
@@ -73,6 +48,8 @@ rule shaping_eval__plot:
         rules.shaping_eval__score.output
     output:
         "results/plots/shaping-eval-{defence}.png"
+    params:
+        with_legend=lambda w: w["defence"] == "tamaraw"
     notebook:
         "../notebooks/plot-scores.ipynb"
 

@@ -11,10 +11,13 @@ Options:
         Write the trace to the specified path [default: trace.csv].
     --plot-file <file>
         Plot the trace to the specified path [default: trace.png].
+    --relative-to <dir>
+        Make all file paths relative to the specified directory [default: ./].
 """
 import sys
 import pathlib
 import subprocess
+from pathlib import Path
 
 import pandas as pd
 import seaborn as sns
@@ -25,9 +28,12 @@ import common
 from common import neqo, doceasy
 
 
-def main(neqo_args, pcap_file: str, trace_file: str, plot_file: str):
+def main(
+    neqo_args, pcap_file: str, trace_file: str, plot_file: str, relative_to: str
+):
     """Run neqo collection."""
     common.init_logging()
+
     (result, pcap) = neqo.run(
         neqo_args,
         check=False,
@@ -40,10 +46,10 @@ def main(neqo_args, pcap_file: str, trace_file: str, plot_file: str):
     sys.stdout.buffer.write(result.stdout)
 
     assert pcap is not None
-    pathlib.Path(pcap_file).write_bytes(pcap)
+    pathlib.Path(relative_to, pcap_file).write_bytes(pcap)
 
     trace_data = tracev2.from_pcap(pcap, server_port=443)
-    tracev2.to_csv(trace_file, trace_data)
+    tracev2.to_csv(Path(relative_to, trace_file), trace_data)
 
     fig, axes = plt.subplots(3, 1, sharex=True, sharey=True)
     for i in (0, 2):
@@ -60,7 +66,7 @@ def main(neqo_args, pcap_file: str, trace_file: str, plot_file: str):
             sns.scatterplot(data=pd.DataFrame(trace_data), x="time", y="size",
                             ax=axes[i], marker='.', edgecolor="blue",
                             facecolor="none")
-    fig.savefig(plot_file, bbox_inches="tight", dpi=150)
+    fig.savefig(Path(relative_to, plot_file), bbox_inches="tight", dpi=150)
 
     sys.exit(result.returncode)
 
@@ -71,4 +77,5 @@ if __name__ == "__main__":
         "--pcap-file": str,
         "--trace-file": str,
         "--plot-file": str,
+        "--relative-to": str,
     }, ignore_extra_keys=True)))

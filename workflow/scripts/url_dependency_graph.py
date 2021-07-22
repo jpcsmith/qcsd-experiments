@@ -135,7 +135,10 @@ class _DependencyGraph:
     def _handle_response(self, msg):
         assert msg["method"] == "Network.responseReceived"
         node_id = msg["params"]["requestId"]
-        if node_id in self._ignored_requests:
+        if (
+            node_id in self._ignored_requests
+            or node_id not in self.graph.nodes
+        ):
             return
         self.graph.nodes[node_id]["done"] = True
 
