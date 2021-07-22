@@ -16,7 +16,7 @@ RUN apt-get -qq update && apt-get -qq install -y \
             fonts-liberation libappindicator1 libnss3 lsb-release xdg-utils wget \
         && rm -rf /var/lib/apt/lists/*
 
-ARG chromium_commit=756066
+ARG chromium_commit=870763
 
 # Download and unzip chromium
 RUN wget -q "https://www.googleapis.com/download/storage/v1/b/chromium-browser-snapshots/o/Linux_x64%2F${chromium_commit}%2Fchrome-linux.zip?alt=media" \

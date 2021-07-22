@@ -55,7 +55,7 @@ async def main(
         session_factory=ChromiumSessionFactory(driver_path=driver_path),
         delay=delay, max_attempts=max_attempts)
 
-    async for result in sampler.sample_multiple((urls, {"tcp": 1})):
+    async for result in sampler.sample_multiple((urls, {"h3-29": 1})):
         result["page_source"] = None
         result["packets"] = None
 
