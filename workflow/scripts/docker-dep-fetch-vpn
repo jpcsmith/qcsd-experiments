@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+#? Usage: docker-fetch-vpn <region_id> <client_id> ARGS
+#?
+#? Wrapper to execute the script docker/dep-fetch/fetch-script within
+#? the image built from docker/dep-fetch, and in a VPN
+#?
+#? Handles configuring the "docker run" command
+
+set -o errexit
+set -o nounset
+
+readonly REGION_ID=${1?"region_id required"}
+readonly CLIENT_ID=${2?"client_id required"}
+shift 2
+
+readonly IMAGE_NAME=dep-fetch
+readonly NETWORK_IMAGE="wg-client-${REGION_ID}-${CLIENT_ID}"
+
+DOCKER_RUN_ARGS=()
+# Disable the log driver so that if the output is streamed, it doesnt saturate
+# docker's logs
+DOCKER_RUN_ARGS+=(-i --rm --log-driver none)
+# Needed for the use of wireguard
+DOCKER_RUN_ARGS+=(--privileged --cap-add NET_ADMIN --cap-add SYS_MODULE)
+# Mimic the script location outside of the container and mount the results
+# directory to allow for easy in/output
+DOCKER_RUN_ARGS+=(--workdir "$PWD" --volume "$PWD/results:$PWD/results")
+# Constrain the CPU and memory usage to allow for parallel invocations
+DOCKER_RUN_ARGS+=(--memory "1.5g" --memory-reservation 1g --cpus 2)
+DOCKER_RUN_ARGS+=("--network=container:${NETWORK_IMAGE}")
+
+exec docker run "${DOCKER_RUN_ARGS[@]}" "${IMAGE_NAME}" "$@"

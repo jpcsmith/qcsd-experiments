@@ -75,6 +75,16 @@ experiment:
       packet_size: 1200
       msd_limit_excess: 1500
 
+  ml_eval_brows:
+    dataset:
+      n_monitored: 100
+      n_instances: 100
+      n_unmonitored: 10_000
+    min_pkt_size: 150
+    splits: {n_folds: 5, seed: 438, validation_size: 0.1}
+    classifiers: ["kfp", "dfnet"]
+    front: *front-default
+
 # excess_msd:
 #   max_samples: 1000
 #   padding: {rate: 1, duration: 10, interval: 5}  # Mbps, seconds, milliseconds

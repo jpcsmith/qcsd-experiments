@@ -21,22 +21,40 @@ Options:
 
     --ranks
         The data is a CSV of the form rank,domain
+
+    --single-url url
+        Fetch the specfied url instead of reading from URLFILE. When
+        used, non-sucessful collections exit with an exit code of 1.
+
 """
+import sys
 import asyncio
 import logging
+from typing import Optional
 
 import doceasy
 from doceasy import Use
 from lab import fetch_websites
 from lab.fetch_websites import ProtocolSampler, ChromiumSessionFactory
-from lab.sniffer import TCPDumpPacketSniffer
+from lab.sniffer import PacketSniffer
 
 LOGGER = logging.getLogger("dep-fetch")
 
 
+class _NoOpPacketSniffer(PacketSniffer):
+    def pcap(self) -> bytes:
+        return b""
+
+    def start(self) -> None:
+        pass
+
+    def stop(self) -> None:
+        pass
+
+
 async def main(
     urlfile, outfile, delay: float, driver_path: str, max_attempts: int,
-    ranks: bool,
+    ranks: bool, single_url: Optional[str],
 ):
     """Load each URL once with TCP and record the logs from the browser.
     """
@@ -45,13 +63,17 @@ async def main(
         level=logging.INFO)
     LOGGER.info("Running dependency collection with arguments: %s", locals())
 
-    urls = (["https://" + domain for (_, domain) in urlfile] if ranks
-            else [url for (url, ) in urlfile])
+    if single_url:
+        LOGGER.info("Using sole URL: %s", single_url)
+        urls = [single_url]
+    else:
+        urls = (["https://" + domain for (_, domain) in urlfile] if ranks
+                else [url for (url, ) in urlfile])
     if not urls:
         raise ValueError("No URLs provided to fetch.")
 
     sampler = ProtocolSampler(
-        sniffer=TCPDumpPacketSniffer(snaplen=96),
+        sniffer=_NoOpPacketSniffer(),
         session_factory=ChromiumSessionFactory(driver_path=driver_path),
         delay=delay, max_attempts=max_attempts)
 
@@ -62,6 +84,8 @@ async def main(
         outfile.write(fetch_websites.encode_result(result))
         outfile.write("\n")
         outfile.flush()
+        if single_url and result["status"] != "success":
+            sys.exit(1)
 
     LOGGER.info("Dependency collection complete.")
 
@@ -75,5 +99,6 @@ if __name__ == '__main__':
             "--delay": Use(float),
             "--max-attempts": Use(int),
             "--ranks": bool,
+            "--single-url": doceasy.Or(str, None),
         }))
     )
