@@ -122,7 +122,7 @@ rule ml_eval_conn__plot:
     wildcard_constraints:
         filtered="(filtered/)?"
     params:
-        with_legend=lambda w: w["defence"] == "tamaraw"
+        with_legend=lambda w: w["defence"] == "front"
     notebook:
         "../notebooks/result-analysis-curve.ipynb"
 

@@ -49,7 +49,8 @@ rule shaping_eval__plot:
     output:
         "results/plots/shaping-eval-{defence}.png"
     params:
-        with_legend=lambda w: w["defence"] == "tamaraw"
+        with_legend=lambda w: w["defence"] == "front",
+        ylabels_at=lambda w: 0.5 if w["defence"] == "tamaraw" else 0.25
     notebook:
         "../notebooks/plot-scores.ipynb"
 
