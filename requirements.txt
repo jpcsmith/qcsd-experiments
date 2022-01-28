@@ -15,7 +15,7 @@ tensorflow==2.5.0
 ansible==4.1.0
 docker==5.0.0
 
-# git+https://github.com/jpcsmith/wf-tools.git@v0.3.0#egg=lab
+# git+https://github.com/jpcsmith/wf-tools.git@develop#egg=lab
 
 # Development files
 wheel

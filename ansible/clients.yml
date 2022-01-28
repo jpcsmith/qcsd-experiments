@@ -1,0 +1,33 @@
+---
+- name: Syncrhonise the experiment directory
+  hosts: clients
+  vars:
+    exp_path: "/root/qcd-experiments"
+  tasks:
+    - name: Copy the experiment
+      ansible.posix.synchronize:
+        src: files/experiment-dir/
+        dest: "{{ exp_path }}"
+        copy_links: true
+
+    - name: Install dependencies
+      ansible.builtin.apt:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - python3.8-venv
+        - python3-pip
+        - docker.io
+
+    - name: Install the Python docker package
+      ansible.builtin.pip:
+        name: docker==5.0.0
+        executable: pip3
+
+    - name: Build the browser image
+      community.docker.docker_image:
+        name: dep-fetch
+        source: build
+        build:
+          path: "{{ exp_path }}/resources/docker/dep-fetch"
+        force_source: true

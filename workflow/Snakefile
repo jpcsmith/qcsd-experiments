@@ -22,6 +22,7 @@ include: "rules/overhead-eval.smk"
 include: "rules/ml-eval-conn.smk"
 include: "rules/ml-eval-brows.smk"
 include: "rules/demo.smk"
+include: "rules/webpage-graphs-mconn.smk"
 
 # include: "rules/delay-vs-drop.smk"
 # include: "rules/excess-msd.smk"

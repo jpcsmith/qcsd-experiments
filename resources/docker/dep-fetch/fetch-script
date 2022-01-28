@@ -26,6 +26,9 @@ Options:
         Fetch the specfied url instead of reading from URLFILE. When
         used, non-sucessful collections exit with an exit code of 1.
 
+    --force-quic-on-all
+        Force QUIC on all the domains, not just the domain of the
+        main HTML page.
 """
 import sys
 import asyncio
@@ -54,7 +57,7 @@ class _NoOpPacketSniffer(PacketSniffer):
 
 async def main(
     urlfile, outfile, delay: float, driver_path: str, max_attempts: int,
-    ranks: bool, single_url: Optional[str],
+    ranks: bool, single_url: Optional[str], force_quic_on_all: bool,
 ):
     """Load each URL once with TCP and record the logs from the browser.
     """
@@ -74,7 +77,10 @@ async def main(
 
     sampler = ProtocolSampler(
         sniffer=_NoOpPacketSniffer(),
-        session_factory=ChromiumSessionFactory(driver_path=driver_path),
+        session_factory=ChromiumSessionFactory(
+            driver_path=driver_path,
+            force_quic_on_all=force_quic_on_all
+        ),
         delay=delay, max_attempts=max_attempts)
 
     async for result in sampler.sample_multiple((urls, {"h3-29": 1})):
@@ -100,5 +106,6 @@ if __name__ == '__main__':
             "--max-attempts": Use(int),
             "--ranks": bool,
             "--single-url": doceasy.Or(str, None),
+            "--force-quic-on-all": bool,
         }))
     )
