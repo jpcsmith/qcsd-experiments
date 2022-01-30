@@ -68,12 +68,28 @@ experiment:
       n_unmonitored: 10_000
     min_pkt_size: 150
     splits: {n_folds: 5, seed: 438, validation_size: 0.1}
-    classifiers: ["kfp", "dfnet"]
+    classifiers: ["kfp", "dfnet", "varcnn-sizes", "varcnn-time"]
     front: *front-default
     tamaraw:
       <<: *tamaraw-default
       packet_size: 1200
       msd_limit_excess: 1500
+
+  ml_eval_mconn:
+    dataset:
+      n_monitored: 100
+      n_instances: 100
+      n_unmonitored: 0
+    splits: {n_folds: 5, seed: 438, validation_size: 0.1}
+    classifiers: ["kfp", "dfnet", "varcnn-sizes", "varcnn-time"]
+    front:
+      <<: *front-default
+      use_empty_resources: true
+    tamaraw:
+      <<: *tamaraw-default
+      packet_size: 1200
+      msd_limit_excess: 1500
+      use_empty_resources: true
 
   ml_eval_brows:
     dataset:
@@ -82,7 +98,7 @@ experiment:
       n_unmonitored: 10_000
     min_pkt_size: 150
     splits: {n_folds: 5, seed: 438, validation_size: 0.1}
-    classifiers: ["kfp", "dfnet"]
+    classifiers: ["kfp", "dfnet", "varcnn-sizes", "varcnn-time"]
     front: *front-default
 
 # excess_msd:

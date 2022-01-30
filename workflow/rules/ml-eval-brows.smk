@@ -62,6 +62,7 @@ rule ml_eval_brows__features:
         "results/ml-eval-brows/{path}/features.h5"
     log:
         "results/ml-eval-brows/{path}/features.log"
+    threads: 64
     shell:
         "workflow/scripts/extract-features {input} {output} 2> {log}"
 
@@ -93,7 +94,10 @@ rule ml_eval_brows__predictions:
         classifier_args=lambda w: ("--classifier-args n_jobs=4,feature_set=kfp"
                                    if w["classifier"] == "kfp" else "")
     threads:
-        lambda w: min(workflow.cores, 16) if w["classifier"] != "kfp" else 4
+        get_threads_for_classifier
+    resources:
+        mem_mb=lambda wildcards, input, threads: int(16000 / threads),
+        time_min=360
     shell:
         "workflow/scripts/evaluate-classifier {params.classifier_args}"
         " {params.classifier} {input.dataset} {input.splits} {output} 2> {log}"

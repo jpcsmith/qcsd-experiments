@@ -3,6 +3,7 @@
   hosts: wg_gateways
   vars_files:
     - vars.yml
+  tags: setup-gateways
   tasks:
     - name: Install aptitude using apt
       apt: name=aptitude state=latest update_cache=yes force_apt_get=yes
@@ -36,14 +37,23 @@
         if wg show wg0; then wg-quick down wg0 && wg-quick up wg0;
         else wg-quick up wg0; fi
 
+
 - name: Setup Wireguard clients
   hosts: wg_clients
   vars_files:
     - vars.yml
+  tags: setup-clients
   tasks:
+    - name: Copy the experiment
+      ansible.posix.synchronize:
+        src: files/experiment-dir/
+        dest: "{{ exp_path }}"
+        copy_links: true
+      tags: sync
+
     - name: Define the resources folder
       ansible.builtin.set_fact:
-        wg_resources: "{{(playbook_dir + '/../resources/wireguard')|realpath}}"
+        wg_resources: "{{ exp_path }}/resources/wireguard"
 
     - name: Ensure {{ wg_resources }} dir exists
       file: path={{ wg_resources }} state=directory
@@ -89,6 +99,9 @@
 
     - name: Check Wireguard client connectivity
       tags: wg-test
-      shell: "NCV_TEST=1 ../workflow/scripts/neqo-client-vpn {{item.region_id}} \
-              {{item.client_id}}"
+      shell:
+        cmd: "source {{exp_path}}/activate
+          && NCV_TEST=1 {{ exp_path }}/workflow/scripts/neqo-client-vpn
+          {{item.region_id}} {{item.client_id}}"
+        executable: /usr/bin/bash
       loop: "{{ client_list | flatten(levels=1) }}"

@@ -1,0 +1,11 @@
+---
+- name: Setup client for ML experiments
+  hosts: ml_host
+  gather_facts: false
+  tasks:
+    - name: Copy the experiment
+      ansible.posix.synchronize:
+        src: files/experiment-dir/
+        dest: "{{ exp_path }}"
+        copy_links: true
+      tags: sync
