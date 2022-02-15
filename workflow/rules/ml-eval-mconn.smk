@@ -26,6 +26,9 @@ rule ml_eval_mconn__dataset:
         "results/ml-eval-mconn/{defence}/dataset.h5"
     params:
         **ml_emc_config["dataset"],
+    threads: 1
+    resources:
+        mem_mb=to_memory_per_core(16_000)
     script:
         "../scripts/create_dataset.py"
 
@@ -62,6 +65,7 @@ rule ml_eval_mconn__features:
         "results/ml-eval-mconn/{path}/features.h5"
     log:
         "results/ml-eval-mconn/{path}/features.log"
+    threads: 64
     shell:
         "workflow/scripts/extract-features {input} {output} 2> {log}"
 
@@ -80,6 +84,7 @@ rule ml_eval_mconn__splits:
         "../scripts/split_dataset.py"
 
 
+ruleorder: combine_varcnn_predictions > ml_eval_mconn__predictions
 rule ml_eval_mconn__predictions:
     input:
         dataset="results/ml-eval-mconn/{path}/features.h5",
@@ -93,7 +98,10 @@ rule ml_eval_mconn__predictions:
         classifier_args=lambda w: ("--classifier-args n_jobs=4,feature_set=kfp"
                                    if w["classifier"] == "kfp" else "")
     threads:
-        lambda w: min(workflow.cores, 16) if w["classifier"] != "kfp" else 4
+        get_threads_for_classifier
+    resources:
+        mem_mb=to_memory_per_core(32_000),
+        time_min=480
     shell:
         "workflow/scripts/evaluate-classifier {params.classifier_args}"
         " {params.classifier} {input.dataset} {input.splits} {output} 2> {log}"
@@ -103,13 +111,13 @@ rule ml_eval_mconn__plot:
     input:
         expand([
             "results/ml-eval-mconn/{{defence}}/predict/{classifier}-0.csv",
-            "results/ml-eval-mconn/simulated-{{defence}}/predict/{classifier}-0.csv",
             "results/ml-eval-mconn/undefended/predict/{classifier}-0.csv",
         ], classifier=ml_emc_config["classifiers"])
     output:
         "results/plots/ml-eval-mconn-{defence}.png"
     params:
-        with_legend=lambda w: w["defence"] == "front"
+        with_legend=lambda w: w["defence"] == "front",
+        with_simulated=False
     notebook:
         "../notebooks/result-analysis-curve.ipynb"
 

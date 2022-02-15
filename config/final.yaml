@@ -68,7 +68,7 @@ experiment:
       n_unmonitored: 10_000
     min_pkt_size: 150
     splits: {n_folds: 5, seed: 438, validation_size: 0.1}
-    classifiers: ["kfp", "dfnet", "varcnn-sizes", "varcnn-time"]
+    classifiers: ["kfp", "dfnet", "varcnn"]
     front: *front-default
     tamaraw:
       <<: *tamaraw-default
@@ -79,9 +79,9 @@ experiment:
     dataset:
       n_monitored: 100
       n_instances: 100
-      n_unmonitored: 0
-    splits: {n_folds: 5, seed: 438, validation_size: 0.1}
-    classifiers: ["kfp", "dfnet", "varcnn-sizes", "varcnn-time"]
+      n_unmonitored: 1000
+    splits: {n_folds: 5, seed: 439, validation_size: 0.1}
+    classifiers: ["kfp", "dfnet", "varcnn"]
     front:
       <<: *front-default
       use_empty_resources: true
@@ -98,41 +98,5 @@ experiment:
       n_unmonitored: 10_000
     min_pkt_size: 150
     splits: {n_folds: 5, seed: 438, validation_size: 0.1}
-    classifiers: ["kfp", "dfnet", "varcnn-sizes", "varcnn-time"]
+    classifiers: ["kfp", "dfnet", "varcnn"]
     front: *front-default
-
-# excess_msd:
-#   max_samples: 1000
-#   padding: {rate: 1, duration: 10, interval: 5}  # Mbps, seconds, milliseconds
-#   excess_values: [16, 350, 700, 1000, 2000]
-
-# delay_vs_drop:
-#   n_monitored: 20
-#   n_instances: 100
-#   n_unmonitored: 1000
-#   tamaraw: *tamaraw-default
-#   splits:
-#     n_folds: 5
-#     seed: 6781
-#     validation_size: 0.1
-
-# front_single_eval:
-#   max_samples: 1000
-#   front_config: *front-default
-
-# tamaraw_single_eval:
-#   max_samples: 1000
-#   tamaraw_config: *tamaraw-default
-
-# ml_eval:
-#   monitored: {samples: 100, instances: 100, extra: 0.6}
-#   unmonitored: {samples: 10_000, instances: 1, extra: 0.25}
-#   snaplen: 96
-#   front_config: *front-default
-#   tamaraw_config: *tamaraw-default
-#   min_packet_size: 100
-#   splits:
-#     n_folds: 10
-#     seed: 437
-#     validation_size: 0.1
-#   classifiers: ["kfp", "dfnet"]

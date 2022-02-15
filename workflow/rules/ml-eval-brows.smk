@@ -89,6 +89,8 @@ rule ml_eval_brows__predictions:
         "results/ml-eval-brows/{path}/predict/{classifier}-0.csv"
     log:
         "results/ml-eval-brows/{path}/predict/{classifier}-0.log"
+    wildcard_constraints:
+        classifier="^(?!varcnn$).*"
     params:
         classifier="{classifier}",
         classifier_args=lambda w: ("--classifier-args n_jobs=4,feature_set=kfp"
@@ -96,8 +98,8 @@ rule ml_eval_brows__predictions:
     threads:
         get_threads_for_classifier
     resources:
-        mem_mb=lambda wildcards, input, threads: int(16000 / threads),
-        time_min=360
+        mem_mb=to_memory_per_core(32_000),
+        time_min=480
     shell:
         "workflow/scripts/evaluate-classifier {params.classifier_args}"
         " {params.classifier} {input.dataset} {input.splits} {output} 2> {log}"

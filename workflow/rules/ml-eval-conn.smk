@@ -104,11 +104,13 @@ rule ml_eval_conn__predictions:
         classifier="{classifier}",
         classifier_args=lambda w: ("--classifier-args n_jobs=4,feature_set=kfp"
                                    if w["classifier"] == "kfp" else "")
+    wildcard_constraints:
+        classifier="^(?!varcnn$).*"
     threads:
         get_threads_for_classifier
     resources:
-        mem_mb=lambda wildcards, input, threads: int(16000 / threads),
-        time_min=360
+        mem_mb=to_memory_per_core(32_000),
+        time_min=480
     shell:
         "workflow/scripts/evaluate-classifier {params.classifier_args}"
         " {params.classifier} {input.dataset} {input.splits} {output} 2> {log}"
@@ -133,17 +135,5 @@ rule ml_eval_conn__plot:
 
 rule ml_eval_conn__all:
     input:
-        [f"results/plots/{filtered}ml-eval-conn-{defence}.png"
-         for defence in ["tamaraw", "front"]
-         # for filtered in ["filtered/", ""]
-         for filtered in [""]
-        ]
-    # input:
-    #     [f"results/ml-eval-conn/{defence}/{filtered}predict/{classifier}-0.csv"
-    #      for defence in ["tamaraw", "front", "undefended", "simulated-tamaraw",
-    #                      "simulated-front"]
-    #      for classifier in ml_ec_config["classifiers"]
-    #      for filtered in ["filtered/", ""]
-    #     ]
-
-
+        "results/plots/ml-eval-conn-tamaraw.png",
+        "results/plots/ml-eval-conn-front.png",

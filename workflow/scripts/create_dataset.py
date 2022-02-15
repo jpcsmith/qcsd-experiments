@@ -1,4 +1,5 @@
 """Create a dataset of monitored and unmonitored traces."""
+import logging
 from pathlib import Path
 from itertools import product, islice
 from typing import Optional, Dict
@@ -33,6 +34,8 @@ def main(
     if simulate_kws and "seed" in simulate_kws:
         rng = np.random.default_rng(simulate_kws["seed"])
         del simulate_kws["seed"]
+    if simulate_kws and "use_empty_resources" in simulate_kws:
+        del simulate_kws["use_empty_resources"]
 
     sample_dirs = [p for p in Path(input_).iterdir() if p.is_dir()]
     sample_dirs.sort(key=lambda p: int(p.stem))
@@ -98,24 +101,28 @@ def main(
 
 
 def _maybe_simulate(path: Path, simulate: str, simulate_kws, rng):
-    if not simulate:
-        return trace.from_csv(path / "trace.csv")
+    try:
+        if not simulate:
+            return trace.from_csv(path / "trace.csv")
 
-    if simulate == "tamaraw":
-        return trace.from_csv(path / "schedule.csv")
-    if simulate == "front":
-        assert rng is not None
-        assert "seed" not in simulate_kws
-        assert all(kw in simulate_kws for kw in [
-            "max_client_packets", "max_server_packets", "packet_size",
-            "peak_minimum", "peak_maximum",
-        ])
+        if simulate == "tamaraw":
+            return trace.from_csv(path / "schedule.csv")
+        if simulate == "front":
+            assert rng is not None
+            assert "seed" not in simulate_kws
+            assert all(kw in simulate_kws for kw in [
+                "max_client_packets", "max_server_packets", "packet_size",
+                "peak_minimum", "peak_maximum",
+            ])
 
-        padding = front.generate_padding(**simulate_kws, random_state=rng)
-        # We should be pointing to an undefended trace.csv file
-        baseline = trace.from_csv(path / "trace.csv")
-        return front.simulate(baseline, padding)
-    raise ValueError(f"Unrecognised simulation: {simulate}")
+            padding = front.generate_padding(**simulate_kws, random_state=rng)
+            # We should be pointing to an undefended trace.csv file
+            baseline = trace.from_csv(path / "trace.csv")
+            return front.simulate(baseline, padding)
+        raise ValueError(f"Unrecognised simulation: {simulate}")
+    except Exception:
+        logging.error("Failed on sample: %s", path)
+        raise
 
 
 if __name__ == "__main__":
