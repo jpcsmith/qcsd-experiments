@@ -1,9 +1,9 @@
 ml_host ansible_host=euler.ethz.ch exp_path=/cluster/scratch/jsmith/qcd-experiments
 
 [wg_gateways]
-frankfurt   region_id=0 ansible_host=164.92.225.7
-new_york    region_id=1 ansible_host=167.71.186.246
-bengaluru   region_id=2 ansible_host=159.89.175.169
+frankfurt   region_id=0 ansible_host=207.154.212.254
+new_york    region_id=1 ansible_host=159.89.178.159
+bengaluru   region_id=2 ansible_host=165.232.179.64
 
 [wg_gateways:vars]
 ansible_user=root

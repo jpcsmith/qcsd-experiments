@@ -1,0 +1,6 @@
+---
+- name: Push changed experiment files from the localhost to the remote.
+  hosts: wg_clients
+  gather_facts: false
+  tasks:
+    - import_tasks: tasks/sync_experiment.yml
