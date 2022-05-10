@@ -20,10 +20,11 @@ rule overhead_eval_mconn__calculate:
     threads:
         workflow.cores
     params:
-        defence="{defence}",
-        tamaraw_config=ohead_mconn_config["tamaraw"]
-    script:
-        "../scripts/calculate_overhead.py"
+        tamaraw_config=json.dumps(ohead_mconn_config["tamaraw"])
+    shell:
+        "workflow/scripts/calculate_overhead.py {wildcards.defence} {input}"
+        " --n-jobs {threads} --tamaraw-config '{params.tamaraw_config}'"
+        " > {output} 2> {log}"
 
 
 rule overhead_eval_mconn__collect:

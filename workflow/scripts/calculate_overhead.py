@@ -1,6 +1,19 @@
-"""Create a CSV of bandwidth and latency overheads for the simulated
-and collected traces.
+#!/usr/bin/env python3
+"""Usage: calculate_overhead.py [options] DEFENCE INPUT_DIR
+
+Create a CSV of bandwidth and latency overheads for the simulated
+and collected traces for the specified defence (front or tamaraw).
+
+Options:
+    --n-jobs <n>
+        Use n processes to calculate the overhead for the various files
+        found in the directory [default: 1].
+
+    --tamaraw-config <json>
+        A JSON dictionary with the configuration values for Tamaraw.
+        Required if the defence is tamaraw.
 """
+import json
 import logging
 import itertools
 import functools
@@ -15,31 +28,37 @@ from lab import tracev2
 from lab.defences import tamaraw
 
 import common
+from common.doceasy import doceasy, Use, Or
 
 _LOGGER = logging.getLogger(__name__)
 
 
 def main(
-    input_,
-    output, *,
+    input_dir: Path,
     defence: str,
-    tamaraw_config,
-    jobs: Optional[int] = None,
+    tamaraw_config: Optional[str],
+    n_jobs: int
 ):
     """Calculate the overhead using multiple processes."""
     common.init_logging()
     _LOGGER.info("Using parameters: %s", locals())
 
-    assert Path(input_).is_dir(), f"invalid path {input_}"
-    directories = sorted([x.parent for x in Path(input_).glob("**/defended/")])
+    if defence == "tamaraw":
+        if tamaraw_config is None:
+            raise ValueError("Tamaraw configuration required.")
+        tamaraw_config = json.loads(tamaraw_config)
+
+    assert input_dir.is_dir(), f"invalid path {input_dir}"
+    directories = sorted(
+        [x.parent for x in Path(input_dir).glob("**/defended/")]
+    )
     _LOGGER.info("Found %d samples", len(directories))
 
     func = functools.partial(
         _calculate_overhead, defence=defence, tamaraw_config=tamaraw_config)
-    jobs = jobs or (multiprocessing.cpu_count() or 4)
-    if jobs > 1:
-        chunksize = max(len(directories) // (jobs * 2), 1)
-        with multiprocessing.pool.Pool(jobs) as pool:
+    if n_jobs > 1:
+        chunksize = max(len(directories) // (n_jobs * 2), 1)
+        with multiprocessing.pool.Pool(n_jobs) as pool:
             scores = list(
                 pool.imap_unordered(func, directories, chunksize=chunksize)
             )
@@ -48,9 +67,8 @@ def main(
         scores = [func(x) for x in directories]
     _LOGGER.info("Overhead calculation complete")
 
-    pd.DataFrame.from_records(
-        itertools.chain.from_iterable(scores)
-    ).to_csv(output, header=True, index=False)
+    results = pd.DataFrame.from_records(itertools.chain.from_iterable(scores))
+    print(results.to_csv(header=True, index=False), end="")
 
 
 def _parse_duration(path):
@@ -70,9 +88,9 @@ def _parse_duration(path):
 
 def _calculate_overhead(dir_, *, defence: str, tamaraw_config):
     try:
-        control = tracev2.from_csv(dir_ / "undefended" / "trace.csv")
-        defended = tracev2.from_csv(dir_ / "defended" / "trace.csv")
-        schedule = tracev2.from_csv(dir_ / "defended" / "schedule.csv")
+        control = np.sort(tracev2.from_csv(dir_ / "undefended" / "trace.csv"))
+        defended = np.sort(tracev2.from_csv(dir_ / "defended" / "trace.csv"))
+        schedule = np.sort(tracev2.from_csv(dir_ / "defended" / "schedule.csv"))
     except Exception as err:
         raise ValueError(f"Error loading files in {dir_}") from err
 
@@ -149,5 +167,9 @@ def _calculate_overhead(dir_, *, defence: str, tamaraw_config):
 
 
 if __name__ == "__main__":
-    main(str(snakemake.input[0]), str(snakemake.output[0]), **snakemake.params,
-         jobs=snakemake.threads)
+    main(**doceasy(__doc__, {
+        "DEFENCE": Or("tamaraw", "front"),
+        "INPUT_DIR": Use(Path),
+        "--n-jobs": Use(int),
+        "--tamaraw-config": Or(None, str),
+    }))
