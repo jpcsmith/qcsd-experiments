@@ -61,7 +61,7 @@ def _parse_duration(path):
     tag = "[FlowShaper] Application complete after "  # xxx ms
     found = None
     with (path / "stdout.txt").open(mode="r") as stdout:
-        found = next((line for line in stdout if line.startswith(tag)), None)
+        found = [line for line in stdout if line.startswith(tag)][-1]
     assert found, f"Run never completed! {path}"
 
     # Parse the next word as an integer
@@ -69,9 +69,12 @@ def _parse_duration(path):
 
 
 def _calculate_overhead(dir_, *, defence: str, tamaraw_config):
-    control = tracev2.from_csv(dir_ / "undefended" / "trace.csv")
-    defended = tracev2.from_csv(dir_ / "defended" / "trace.csv")
-    schedule = tracev2.from_csv(dir_ / "defended" / "schedule.csv")
+    try:
+        control = tracev2.from_csv(dir_ / "undefended" / "trace.csv")
+        defended = tracev2.from_csv(dir_ / "defended" / "trace.csv")
+        schedule = tracev2.from_csv(dir_ / "defended" / "schedule.csv")
+    except Exception as err:
+        raise ValueError(f"Error loading files in {dir_}") from err
 
     undefended_size = np.sum(np.abs(control["size"]))
     defended_size = np.sum(np.abs(defended["size"]))
@@ -125,8 +128,8 @@ def _calculate_overhead(dir_, *, defence: str, tamaraw_config):
         },
         {
             "sample": str(dir_),
-            "overhead": "bandwidth-alt",
-            "setting": "simulated",
+            "overhead": "bandwidth",
+            "setting": "simulated-alt",
             "value": ((simulated_size_alt - undefended_size) / undefended_size
                       if simulated_size_alt is not None else None)
         },

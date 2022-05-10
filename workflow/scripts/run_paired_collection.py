@@ -1,5 +1,6 @@
 """Collect a defended and control trace."""
 # pylint: disable=too-many-arguments
+import os
 import hashlib
 import logging
 import functools
@@ -97,7 +98,8 @@ def main(
     n_monitored: int = 0,
     n_unmonitored: int = 0,
     max_failures: int = 3,
-    timeout: float = 60,
+    timeout: float = 120,
+    use_multiple_connections: bool = False,
 ):
     """Collect all the samples for the speicified arguments."""
     common.init_logging(name_thread=True, verbose=True)
@@ -111,6 +113,12 @@ def main(
 
     n_regions = config["wireguard"]["n_regions"]
     n_clients_per_region = config["wireguard"]["n_clients_per_region"]
+
+    _LOGGER.info("Env variable NEQO_BIN=%s", os.environ["NEQO_BIN"])
+    _LOGGER.info("Env variable NEQO_BIN_MP=%s", os.environ["NEQO_BIN_MP"])
+    if use_multiple_connections:
+        os.environ["NEQO_BIN"] = os.environ["NEQO_BIN_MP"]
+        _LOGGER.info("Env variable updated NEQO_BIN=%s", os.environ["NEQO_BIN"])
 
     Collector(
         functools.partial(

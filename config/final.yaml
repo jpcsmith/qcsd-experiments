@@ -52,7 +52,7 @@ experiment:
       packet_size: 750
 
   shaping_eval:
-    n_samples: 500
+    n_samples: &ovh_samples 500
     scores:
       ts_offset: {min: 0, max: 200, inc: 5}
       resample_rates: ["1ms", "5ms", "25ms", "50ms"]
@@ -82,14 +82,19 @@ experiment:
       n_unmonitored: 1000
     splits: {n_folds: 5, seed: 439, validation_size: 0.1}
     classifiers: ["kfp", "dfnet", "varcnn"]
-    front:
+    front: &mconn-front
       <<: *front-default
       use_empty_resources: true
-    tamaraw:
+    tamaraw: &mconn-tamaraw
       <<: *tamaraw-default
       packet_size: 1200
       msd_limit_excess: 1500
       use_empty_resources: true
+
+  overhead_eval_mconn:
+    n_samples: *ovh_samples
+    front: *mconn-front
+    tamaraw: *mconn-tamaraw
 
   ml_eval_brows:
     dataset:

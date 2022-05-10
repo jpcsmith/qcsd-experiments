@@ -25,19 +25,28 @@ def main(front: str, tamaraw: str, output: str):
         for overhead in ["Bandwidth", "Latency"]:
             table.write(r"\textbf{%s} \\" % overhead)
             table.write("\n")
-            for setting in ["Defended", "Simulated"]:
+
+            settings = ["Defended", "Simulated"]
+            if overhead == "Bandwidth":
+                settings.append("simulated-alt")
+
+            for setting in settings:
                 table.write(r"\quad %s" % setting)
                 for defence in ["front", "tamaraw"]:
                     median = data["50%"][defence][overhead][setting]
                     iqr1 = data["25%"][defence][overhead][setting]
                     iqr3 = data["75%"][defence][overhead][setting]
-                    table.write(f" &${median:.2f}$ (${iqr1:.2f} - {iqr3:.2f}$)")
+                    table.write(
+                        f" &${median:.2f}$ (${iqr1:.2f}\\text{{--}}{iqr3:.2f}$)"
+                    )
                 table.write(r" \\" + "\n")
         table.write("\\bottomrule\n\\end{tabular}\n")
         with pd.option_context('display.max_colwidth', None):
             table.write(textwrap.indent(
-                data.drop(columns=["count", "mean", "std", "min", "max"]).to_csv(),
+                data.drop(
+                    columns=["count", "mean", "std", "min", "max"]).to_csv(),
                 "% "))
+
 
 if __name__ == "__main__":
     snakemake = globals().get("snakemake", None)
