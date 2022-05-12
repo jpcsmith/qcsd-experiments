@@ -105,6 +105,28 @@ rule ml_eval_brows__predictions:
         " {params.classifier} {input.dataset} {input.splits} {output} 2> {log}"
 
 
+rule ml_eval_brows__tuned_kfp_predict:
+    input:
+        "results/ml-eval-brows/{path}/features.h5"
+    output:
+        "results/ml-eval-brows/{path}/tuned-predict/kfp.csv"
+    log:
+        "results/ml-eval-brows/{path}/tuned-predict/kfp.log",
+        cv_results="results/ml-eval-brows/{path}/tuned-predict/cv-results-kfp.csv",
+    threads:
+        workflow.cores
+    shell:
+        "workflow/scripts/evaluate_tuned_kfp.py --verbose 0 --n-jobs {threads}"
+        " --cv-results-path {log[cv_results]} {input} > {output} 2> {log[0]}"
+
+
+rule ml_eval_brows__tuned_all:
+    input:
+        "results/ml-eval-brows/front/tuned-predict/kfp.csv",
+        "results/ml-eval-brows/simulated-front/tuned-predict/kfp.csv",
+        "results/ml-eval-brows/undefended/tuned-predict/kfp.csv",
+
+
 rule ml_eval_brows__plot:
     input:
         expand([

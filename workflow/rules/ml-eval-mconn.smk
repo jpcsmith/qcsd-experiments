@@ -1,5 +1,6 @@
 ml_emc_config = config["experiment"]["ml_eval_mconn"]
 
+
 rule ml_eval_mconn__collect:
     input:
         "results/webpage-graphs-mconn/graphs/"
@@ -31,31 +32,6 @@ rule ml_eval_mconn__dataset:
         mem_mb=to_memory_per_core(16_000)
     script:
         "../scripts/create_dataset.py"
-
-
-# rule ml_eval_mconn__simulated_tamaraw:
-#     input:
-#         "results/ml-eval-mconn/tamaraw/dataset/"
-#     output:
-#         "results/ml-eval-mconn/simulated-tamaraw/dataset.h5"
-#     params:
-#         **ml_emc_config["dataset"],
-#         simulate="tamaraw",
-#     script:
-#         "../scripts/create_dataset.py"
-#
-#
-# rule ml_eval_mconn__simulated_front:
-#     input:
-#         "results/ml-eval-mconn/undefended/dataset/"
-#     output:
-#         "results/ml-eval-mconn/simulated-front/dataset.h5"
-#     params:
-#         **ml_emc_config["dataset"],
-#         simulate="front",
-#         simulate_kws={**ml_emc_config["front"], "seed": 297},
-#     script:
-#         "../scripts/create_dataset.py"
 
 
 rule ml_eval_mconn__features:
@@ -105,6 +81,42 @@ rule ml_eval_mconn__predictions:
     shell:
         "workflow/scripts/evaluate-classifier {params.classifier_args}"
         " {params.classifier} {input.dataset} {input.splits} {output} 2> {log}"
+
+
+rule ml_eval_mconn__tuned_varcnn_predict:
+    input:
+        "results/ml-eval-mconn/{path}/dataset.h5"
+    output:
+        "results/ml-eval-mconn/{path}/tuned-predict/varcnn-{feature_type}.csv"
+    log:
+        "results/ml-eval-mconn/{path}/tuned-predict/varcnn-{feature_type}.log"
+    threads:
+        get_threads_for_classifier({"classifier": "varcnn"})
+    shell:
+        "workflow/scripts/evaluate_tuned_varcnn.py --verbose 0"
+        " {wildcards.feature_type} {input} > {output} 2> {log}"
+
+rule ml_eval_mconn__tuned_kfp_predict:
+    input:
+        "results/ml-eval-mconn/{path}/features.h5"
+    output:
+        "results/ml-eval-mconn/{path}/tuned-predict/kfp.csv"
+    log:
+        "results/ml-eval-mconn/{path}/tuned-predict/kfp.log",
+        cv_results="results/ml-eval-mconn/{path}/tuned-predict/cv-results-kfp.csv",
+    threads:
+        workflow.cores
+    shell:
+        "workflow/scripts/evaluate_tuned_kfp.py --verbose 0 --n-jobs {threads}"
+        " --cv-results-path {log[cv_results]} {input} > {output} 2> {log[0]}"
+
+
+rule ml_eval_mconn__tuned_all:
+    input:
+        expand([
+            "results/ml-eval-mconn/{defence}/tuned-predict/kfp.csv",
+            "results/ml-eval-mconn/undefended/tuned-predict/kfp.csv",
+        ], defence=["tamaraw", "front"])
 
 
 rule ml_eval_mconn__plot:

@@ -140,9 +140,9 @@ class Experiment:
             classes = np.asarray(h5in["labels"]["class"][:])
 
         # TODO: Remove, this is for debugging purposes
-        mask = (classes < 2)
-        classes = classes[mask][9500:]
-        sizes = sizes[mask][9500:]
+        # mask = (classes < 10)
+        # classes = classes[mask][9500:]
+        # sizes = sizes[mask][9500:]
         # TODO: Remove above
 
         max_packets = max(

@@ -116,6 +116,30 @@ rule ml_eval_conn__predictions:
         " {params.classifier} {input.dataset} {input.splits} {output} 2> {log}"
 
 
+rule ml_eval_conn__tuned_kfp_predict:
+    input:
+        "results/ml-eval-conn/{path}/features.h5"
+    output:
+        "results/ml-eval-conn/{path}/tuned-predict/kfp.csv"
+    log:
+        "results/ml-eval-conn/{path}/tuned-predict/kfp.log",
+        cv_results="results/ml-eval-conn/{path}/tuned-predict/cv-results-kfp.csv",
+    threads:
+        workflow.cores
+    shell:
+        "workflow/scripts/evaluate_tuned_kfp.py --verbose 0 --n-jobs {threads}"
+        " --cv-results-path {log[cv_results]} {input} > {output} 2> {log[0]}"
+
+
+rule ml_eval_conn__tuned_all:
+    input:
+        expand([
+            "results/ml-eval-conn/{defence}/tuned-predict/kfp.csv",
+            "results/ml-eval-conn/simulated-{defence}/tuned-predict/kfp.csv",
+            "results/ml-eval-conn/undefended/tuned-predict/kfp.csv",
+        ], defence=["front", "tamaraw"])
+
+
 rule ml_eval_conn__plot:
     input:
         expand([
