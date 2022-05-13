@@ -66,12 +66,12 @@ class Experiment:
     feature_type: str
 
     # The fraction of samples to use for testing the final model
-    test_size: float = 0.2
+    test_size: float = 0.1
 
     validation_split: float = 0.2
 
     # Number of folds used in the stratified k-fold cross validation
-    n_folds: int = 5
+    n_folds: int = 3
 
     # Level of debugging output from sklearn and tensorflow
     verbose: int = 0

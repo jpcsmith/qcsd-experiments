@@ -1,13 +1,118 @@
 ml_ec_config = config["experiment"]["ml_eval_conn"]
 
 
+rule ml_eval_conn__all:
+    """Create all the plots for the single-connection evaluations (static rule)."""
+    input:
+        "results/plots/ml-eval-conn-tamaraw.png",
+        "results/plots/ml-eval-conn-front.png",
+
+
+rule ml_eval_conn__plot:
+    """Plot the defended, simulated, and undefended settings for the given defence for
+    all classifiers (pattern rule)."""
+    output:
+        "results/plots/ml-eval-conn-{defence}.png",
+        "results/plots/ml-eval-conn-{defence}.pgf",
+    input:
+        expand([
+            "results/ml-eval-conn/defence~{{defence}}/classifier~{classifier}/predictions.csv",
+            "results/ml-eval-conn/defence~simulated-{{defence}}/classifier~{classifier}/predictions.csv",
+            "results/ml-eval-conn/defence~undefended/classifier~{classifier}/predictions.csv",
+        ], classifier=["kfp"])
+    params:
+        with_legend=lambda w: w["defence"] == "front"
+    notebook:
+        "../notebooks/result-analysis-curve.ipynb"
+
+
+rule ml_eval_conn__predict__varcnn:
+    """Perform hyperparameter validation and predictions for either the sizes or time
+    component of the Var-CNN classifier (pattern rule)."""
+    output:
+        "results/ml-eval-conn/{path}/classifier~varcnn-{feature_type}/predictions.csv"
+    input:
+        "results/ml-eval-conn/{path}/dataset.h5"
+    log:
+        "results/ml-eval-conn/{path}/classifier~varcnn-{feature_type}/predictions.log"
+    threads:
+        get_threads_for_classifier({"classifier": "varcnn"})
+    shell:
+        "workflow/scripts/evaluate_tuned_varcnn.py --verbose 0"
+        " {wildcards.feature_type} {input} > {output} 2> {log}"
+
+
+rule ml_eval_conn__predict__kfp:
+    """Perform hyperparameter validation and predictions for the k-FP classifier
+    (pattern rule)."""
+    output:
+        "results/ml-eval-conn/{path}/classifier~kfp/predictions.csv"
+    input:
+        "results/ml-eval-conn/{path}/classifier~kfp/features.h5"
+    log:
+        "results/ml-eval-conn/{path}/classifier~kfp/predictions.log",
+        cv_results="results/ml-eval-conn/{path}/classifier~kfp/cv-results.log",
+    threads:
+        workflow.cores
+    shell:
+        "workflow/scripts/evaluate_tuned_kfp.py --verbose 0 --n-jobs {threads}"
+        " --cv-results-path {log[cv_results]} {input} > {output} 2> {log[0]}"
+
+
+rule ml_eval_conn__extract_features__kfp:
+    """Pre-extract the k-FP features as this can be time-consuming (pattern rule)."""
+    output:
+        "results/ml-eval-conn/{path}/classifier~kfp/features.h5"
+    input:
+        "results/ml-eval-conn/{path}/dataset.h5"
+    log:
+        "results/ml-eval-conn/{path}/classifier~kfp/features.log"
+    threads: 8
+    shell:
+        "workflow/scripts/extract_kfp_features.py {input} > {output} 2> {log}"
+
+
+rule ml_eval_conn__simulated_dataset:
+    """Create a simulated dataset based on a collected dataset (pattern rule)."""
+    output:
+        "results/ml-eval-conn/defence~simulated-{defence}/dataset.h5"
+    input:
+        lambda w: (
+            "results/ml-eval-conn/defence~tamaraw/dataset/" if w["defence"] == "tamaraw"
+            else "results/ml-eval-conn/defence~undefended/dataset/"
+        )
+    params:
+        **ml_ec_config["dataset"],
+        simulate="{defence}",
+        simulate_kws=lambda w: (
+            {**ml_ec_config["front"], "seed": 297} if w["defence"] == "front" else {}
+        )
+    script:
+        "../scripts/create_dataset.py"
+
+
+rule ml_eval_conn__collect__to_binary:
+    """Convert a collected file-based dataset to a binary dataset for faster reads
+    (pattern rule)."""
+    output:
+        "results/ml-eval-conn/defence~{defence}/dataset.h5"
+    input:
+        "results/ml-eval-conn/defence~{defence}/dataset/"
+    params:
+        **ml_ec_config["dataset"],
+    script:
+        "../scripts/create_dataset.py"
+
+
 rule ml_eval_conn__collect:
+    """Collect samples for the single-connection machine-learning evaluation
+    (pattern rule)."""
+    output:
+        directory("results/ml-eval-conn/defence~{defence}/dataset/")
     input:
         "results/webpage-graphs/graphs/"
-    output:
-        directory("results/ml-eval-conn/{defence}/dataset/")
     log:
-        "results/ml-eval-conn/{defence}/dataset.log"
+        "results/ml-eval-conn/defence~{defence}/dataset.log"
     threads:
         workflow.cores
     params:
@@ -17,147 +122,3 @@ rule ml_eval_conn__collect:
         n_unmonitored=ml_ec_config["dataset"]["n_unmonitored"],
     script:
         "../scripts/run_collection.py"
-
-
-rule ml_eval_conn__dataset:
-    input:
-        "results/ml-eval-conn/{defence}/dataset/"
-    output:
-        "results/ml-eval-conn/{defence}/dataset.h5"
-    params:
-        **ml_ec_config["dataset"],
-    script:
-        "../scripts/create_dataset.py"
-
-
-rule ml_eval_conn__simulated_tamaraw:
-    input:
-        "results/ml-eval-conn/tamaraw/dataset/"
-    output:
-        "results/ml-eval-conn/simulated-tamaraw/dataset.h5"
-    params:
-        **ml_ec_config["dataset"],
-        simulate="tamaraw",
-    script:
-        "../scripts/create_dataset.py"
-
-
-rule ml_eval_conn__simulated_front:
-    input:
-        "results/ml-eval-conn/undefended/dataset/"
-    output:
-        "results/ml-eval-conn/simulated-front/dataset.h5"
-    params:
-        **ml_ec_config["dataset"],
-        simulate="front",
-        simulate_kws={**ml_ec_config["front"], "seed": 297},
-    script:
-        "../scripts/create_dataset.py"
-
-
-rule ml_eval_conn__filtered_dataset:
-    input:
-        "results/ml-eval-conn/{path}/dataset.h5"
-    output:
-        "results/ml-eval-conn/{path}/filtered/dataset.h5"
-    params:
-        size=ml_ec_config["min_pkt_size"],
-    shell:
-        "workflow/scripts/remove-small-packets {params.size} {input} {output}"
-
-
-rule ml_eval_conn__features:
-    input:
-        "results/ml-eval-conn/{path}/dataset.h5"
-    output:
-        "results/ml-eval-conn/{path}/features.h5"
-    log:
-        "results/ml-eval-conn/{path}/features.log"
-    threads: 64
-    shell:
-        "workflow/scripts/extract-features {input} {output} 2> {log}"
-
-
-rule ml_eval_conn__splits:
-    """Create train-test-validation splits of the dataset."""
-    input:
-        "results/ml-eval-conn/{path}/features.h5"
-    output:
-        "results/ml-eval-conn/{path}/split/split-0.json"
-    params:
-        seed=ml_ec_config["splits"]["seed"],
-        n_folds=ml_ec_config["splits"]["n_folds"],
-        validation_size=ml_ec_config["splits"]["validation_size"],
-    script:
-        "../scripts/split_dataset.py"
-
-
-rule ml_eval_conn__predictions:
-    input:
-        dataset="results/ml-eval-conn/{path}/features.h5",
-        splits="results/ml-eval-conn/{path}/split/split-0.json"
-    output:
-        "results/ml-eval-conn/{path}/predict/{classifier}-0.csv"
-    log:
-        "results/ml-eval-conn/{path}/predict/{classifier}-0.log"
-    params:
-        classifier="{classifier}",
-        classifier_args=lambda w: ("--classifier-args n_jobs=4,feature_set=kfp"
-                                   if w["classifier"] == "kfp" else "")
-    wildcard_constraints:
-        classifier="^(?!varcnn$).*"
-    threads:
-        get_threads_for_classifier
-    resources:
-        mem_mb=to_memory_per_core(32_000),
-        time_min=480
-    shell:
-        "workflow/scripts/evaluate-classifier {params.classifier_args}"
-        " {params.classifier} {input.dataset} {input.splits} {output} 2> {log}"
-
-
-rule ml_eval_conn__tuned_kfp_predict:
-    input:
-        "results/ml-eval-conn/{path}/features.h5"
-    output:
-        "results/ml-eval-conn/{path}/tuned-predict/kfp.csv"
-    log:
-        "results/ml-eval-conn/{path}/tuned-predict/kfp.log",
-        cv_results="results/ml-eval-conn/{path}/tuned-predict/cv-results-kfp.csv",
-    threads:
-        workflow.cores
-    shell:
-        "workflow/scripts/evaluate_tuned_kfp.py --verbose 0 --n-jobs {threads}"
-        " --cv-results-path {log[cv_results]} {input} > {output} 2> {log[0]}"
-
-
-rule ml_eval_conn__tuned_all:
-    input:
-        expand([
-            "results/ml-eval-conn/{defence}/tuned-predict/kfp.csv",
-            "results/ml-eval-conn/simulated-{defence}/tuned-predict/kfp.csv",
-            "results/ml-eval-conn/undefended/tuned-predict/kfp.csv",
-        ], defence=["front", "tamaraw"])
-
-
-rule ml_eval_conn__plot:
-    input:
-        expand([
-            "results/ml-eval-conn/{{defence}}/{{filtered}}predict/{classifier}-0.csv",
-            "results/ml-eval-conn/simulated-{{defence}}/{{filtered}}predict/{classifier}-0.csv",
-            "results/ml-eval-conn/undefended/{{filtered}}predict/{classifier}-0.csv",
-        ], classifier=ml_ec_config["classifiers"])
-    output:
-        "results/plots/{filtered}ml-eval-conn-{defence}.png"
-    wildcard_constraints:
-        filtered="(filtered/)?"
-    params:
-        with_legend=lambda w: w["defence"] == "front"
-    notebook:
-        "../notebooks/result-analysis-curve.ipynb"
-
-
-rule ml_eval_conn__all:
-    input:
-        "results/plots/ml-eval-conn-tamaraw.png",
-        "results/plots/ml-eval-conn-front.png",

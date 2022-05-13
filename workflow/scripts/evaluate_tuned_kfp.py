@@ -3,9 +3,9 @@
 
 Perform hyperparameter turning on the k-FP classifier.
 
-The features are read from the "kfp" key in the HDF5 dataset located at
-FEATURES_PATH and the probability predictions are written in CSV format
-to OUTFILE (defaults to stdout).
+The features are read from the CSV file located at FEATURES_PATH and the
+probability predictions are written in CSV format to OUTFILE (defaults to
+stdout).
 
 Options:
     --cv-results-path <path>
@@ -24,7 +24,6 @@ import dataclasses
 from pathlib import Path
 from typing import Optional, ClassVar
 
-import h5py
 import numpy as np
 import pandas as pd
 from sklearn.metrics import make_scorer
@@ -65,10 +64,10 @@ class Experiment:
     cv_results_path: Optional[Path]
 
     # The fraction of samples to use for testing the final model
-    test_size: float = 0.2
+    test_size: float = 0.1
 
     # Number of folds used in the stratified k-fold cross validation
-    n_folds: int = 5
+    n_folds: int = 3
 
     # Level of debugging output from sklearn and tensorflow
     verbose: int = 0
@@ -170,9 +169,12 @@ class Experiment:
 
     def load_dataset(self):
         """Load the features and classes from the dataset."""
-        with h5py.File(self.features_path, mode="r") as h5in:
-            features = np.asarray(h5in["kfp"])
-            classes = np.asarray(h5in["labels"]["class"][:])
+        frame = pd.read_csv(self.features_path)
+        assert frame.columns.get_loc("y_true") == 0, "y_true not first column?"
+
+        classes = frame.iloc[:, 0].to_numpy()
+        features = frame.iloc[:, 1:].to_numpy()
+
         return features, classes
 
 

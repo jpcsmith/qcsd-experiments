@@ -50,13 +50,11 @@ def build_neqo_args(exp_config):
 localrules: combine_varcnn_predictions
 rule combine_varcnn_predictions:
     """Combines VarCNN time and sizes predictions."""
-    input:
-        sizes="{path}/varcnn-sizes-{i}.csv",
-        times="{path}/varcnn-time-{i}.csv"
     output:
-        "{path}/varcnn-{i}.csv"
-    wildcard_constraints:
-        i="\d+"
+        "{path}/classifier~varcnn/predictions.csv"
+    input:
+        sizes="{path}/classifier~varcnn-sizes/predictions.csv",
+        times="{path}/classifier~varcnn-time/predictions.csv",
     run:
         import pandas as pd
         sizes = pd.read_csv(input["sizes"]).set_index("y_true", append=True)
@@ -64,3 +62,49 @@ rule combine_varcnn_predictions:
         combined = (sizes + times) / 2
         combined = combined.reset_index(level="y_true", drop=False)
         combined.to_csv(output[0], header=True, index=False)
+
+
+rule predict__kfp:
+    """Perform hyperparameter validation and predictions for the k-FP classifier
+    (pattern rule)."""
+    output:
+        "{path}/classifier~kfp/predictions.csv"
+    input:
+        "{path}/classifier~kfp/features.h5"
+    log:
+        "{path}/classifier~kfp/predictions.log",
+        cv_results="{path}/classifier~kfp/cv-results.csv",
+    threads:
+        workflow.cores
+    shell:
+        "workflow/scripts/evaluate_tuned_kfp.py --verbose 0 --n-jobs {threads}"
+        " --cv-results-path {log[cv_results]} {input} > {output} 2> {log[0]}"
+
+
+rule predict__varcnn:
+    """Perform hyperparameter validation and predictions for either the sizes or time
+    component of the Var-CNN classifier (pattern rule)."""
+    output:
+        "{path}/classifier~varcnn-{feature_type}/predictions.csv"
+    input:
+        "{path}/dataset.h5"
+    log:
+        "{path}/classifier~varcnn-{feature_type}/predictions.log"
+    threads:
+        get_threads_for_classifier({"classifier": "varcnn"})
+    shell:
+        "workflow/scripts/evaluate_tuned_varcnn.py --verbose 0 {wildcards.feature_type}"
+        " {input} > {output} 2> {log}"
+
+
+rule extract_features__kfp:
+    """Pre-extract the k-FP features as this can be time-consuming (pattern rule)."""
+    output:
+        "{path}/classifier~kfp/features.h5"
+    input:
+        "{path}/dataset.h5"
+    log:
+        "{path}/classifier~kfp/features.log"
+    threads: 12
+    shell:
+        "workflow/scripts/extract_kfp_features.py {input} > {output} 2> {log}"
