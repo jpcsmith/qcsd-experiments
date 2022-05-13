@@ -2,6 +2,8 @@ ml_eb_config = config["experiment"]["ml_eval_brows"]
 
 
 rule ml_eval_brows__plot:
+    """Plot the defended and undefended settings for FRONT and all classifiers in the
+    browser setting (static rule)."""
     output:
         "results/plots/ml-eval-brows-front.png"
     input:

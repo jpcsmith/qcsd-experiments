@@ -26,52 +26,6 @@ rule ml_eval_conn__plot:
         "../notebooks/result-analysis-curve.ipynb"
 
 
-rule ml_eval_conn__predict__varcnn:
-    """Perform hyperparameter validation and predictions for either the sizes or time
-    component of the Var-CNN classifier (pattern rule)."""
-    output:
-        "results/ml-eval-conn/{path}/classifier~varcnn-{feature_type}/predictions.csv"
-    input:
-        "results/ml-eval-conn/{path}/dataset.h5"
-    log:
-        "results/ml-eval-conn/{path}/classifier~varcnn-{feature_type}/predictions.log"
-    threads:
-        get_threads_for_classifier({"classifier": "varcnn"})
-    shell:
-        "workflow/scripts/evaluate_tuned_varcnn.py --verbose 0"
-        " {wildcards.feature_type} {input} > {output} 2> {log}"
-
-
-rule ml_eval_conn__predict__kfp:
-    """Perform hyperparameter validation and predictions for the k-FP classifier
-    (pattern rule)."""
-    output:
-        "results/ml-eval-conn/{path}/classifier~kfp/predictions.csv"
-    input:
-        "results/ml-eval-conn/{path}/classifier~kfp/features.h5"
-    log:
-        "results/ml-eval-conn/{path}/classifier~kfp/predictions.log",
-        cv_results="results/ml-eval-conn/{path}/classifier~kfp/cv-results.log",
-    threads:
-        workflow.cores
-    shell:
-        "workflow/scripts/evaluate_tuned_kfp.py --verbose 0 --n-jobs {threads}"
-        " --cv-results-path {log[cv_results]} {input} > {output} 2> {log[0]}"
-
-
-rule ml_eval_conn__extract_features__kfp:
-    """Pre-extract the k-FP features as this can be time-consuming (pattern rule)."""
-    output:
-        "results/ml-eval-conn/{path}/classifier~kfp/features.h5"
-    input:
-        "results/ml-eval-conn/{path}/dataset.h5"
-    log:
-        "results/ml-eval-conn/{path}/classifier~kfp/features.log"
-    threads: 8
-    shell:
-        "workflow/scripts/extract_kfp_features.py {input} > {output} 2> {log}"
-
-
 rule ml_eval_conn__simulated_dataset:
     """Create a simulated dataset based on a collected dataset (pattern rule)."""
     output:
