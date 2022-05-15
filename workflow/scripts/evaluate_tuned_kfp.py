@@ -10,6 +10,8 @@ stdout).
 Options:
     --cv-results-path <path>
         Write the cross-validation results to a csv at <path>.
+    --feature-importance <path>
+        Save feature importances to specified file.
     --verbose <val>
         Set the verbosity of the gridsearch and classifier. A value of
         0 disables output whereas 3 produces all output [default: 0].
@@ -62,6 +64,9 @@ class Experiment:
 
     # The output path for the cross-validation results
     cv_results_path: Optional[Path]
+
+    # The output path for feature importances
+    feature_importance: Optional[Path]
 
     # The fraction of samples to use for testing the final model
     test_size: float = 0.1
@@ -128,6 +133,12 @@ class Experiment:
             pd.DataFrame(results).to_csv(
                 self.cv_results_path, header=True, index=False
             )
+
+        if self.feature_importance is not None:
+            pd.DataFrame({
+                "feature": kfingerprinting.ALL_DEFAULT_FEATURES,
+                "weight": classifier.forest_.feature_importances_
+            }).to_csv(self.feature_importance, header=True, index=False)
 
         # Predict the classes for the test set
         probabilities = classifier.predict_proba(x_test)
@@ -197,6 +208,7 @@ if __name__ == "__main__":
         "OUTFILE": doceasy.CsvFile(mode="w", default="-"),
         "FEATURES_PATH": Use(Path),
         "--cv-results-path": Or(None, Use(Path)),
+        "--feature-importance": Or(None, Use(Path)),
         "--n-jobs": Use(int),
         "--verbose": Use(int),
     }))
