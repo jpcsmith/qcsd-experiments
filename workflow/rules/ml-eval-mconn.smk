@@ -8,6 +8,16 @@ rule ml_eval_mconn__all:
         "results/plots/ml-eval-mconn-front.png"
 
 
+rule ml_eval_mconn__all__padded:
+    input:
+        expand([
+            "results/ml-eval-mconn/defence~{defence}/classifier~kfp/predictions.csv",
+            ("results/ml-eval-mconn/defence~padded-{defence}/strategy~{strategy}"
+                "/direction~{direction}/classifier~kfp/predictions.csv"),
+        ], defence=["tamaraw", "front"], strategy=["padE", "pad500", "padMTU"],
+        direction=["in", "out", "both"])
+
+
 rule ml_eval_mconn__plot:
     """Plot the defended and undefended settings for the given defence for all
     classifiers in the multiconnection setting (pattern rule)."""

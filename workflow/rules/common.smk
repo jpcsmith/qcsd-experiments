@@ -68,9 +68,10 @@ rule predict__kfp:
     """Perform hyperparameter validation and predictions for the k-FP classifier
     (pattern rule)."""
     output:
-        "{path}/classifier~kfp/predictions.csv"
+        "{path}/classifier~kfp/predictions.csv",
+        feature_importance="{path}/classifier~kfp/feature-importances.csv"
     input:
-        "{path}/classifier~kfp/features.h5"
+        "{path}/classifier~kfp/features.csv"
     log:
         "{path}/classifier~kfp/predictions.log",
         cv_results="{path}/classifier~kfp/cv-results.csv",
@@ -78,7 +79,8 @@ rule predict__kfp:
         workflow.cores
     shell:
         "workflow/scripts/evaluate_tuned_kfp.py --verbose 0 --n-jobs {threads}"
-        " --cv-results-path {log[cv_results]} {input} > {output} 2> {log[0]}"
+        " --cv-results-path {log[cv_results]} --feature-importance {output[feature_importance]}"
+        " {input} > {output[0]} 2> {log[0]}"
 
 
 rule predict__varcnn:
@@ -100,7 +102,7 @@ rule predict__varcnn:
 rule extract_features__kfp:
     """Pre-extract the k-FP features as this can be time-consuming (pattern rule)."""
     output:
-        "{path}/classifier~kfp/features.h5"
+        "{path}/classifier~kfp/features.csv"
     input:
         "{path}/dataset.h5"
     log:
@@ -108,3 +110,14 @@ rule extract_features__kfp:
     threads: 12
     shell:
         "workflow/scripts/extract_kfp_features.py {input} > {output} 2> {log}"
+
+
+rule simulate__padded_packets:
+    """Create a simulated dataset where incoming packet sizes are hidden."""
+    output:
+        "{path}/defence~padded-{defence}/strategy~{strategy}/direction~{direction}/dataset.h5"
+    input:
+        "{path}/defence~{defence}/dataset.h5"
+    shell:
+        "workflow/scripts/hide_sizes.py --direction {wildcards.direction}"
+        " {wildcards.strategy} {input} {output}"
