@@ -31,6 +31,7 @@ from lab.feature_extraction.trace import (
 from lab.classifiers import varcnn
 from lab.metrics import rprecision_score, recall_score
 import tensorflow
+from tensorflow.keras import mixed_precision
 
 from common import doceasy
 from common.doceasy import Use, Or
@@ -47,6 +48,11 @@ def main(outfile, **kwargs):
         format='[%(asctime)s] [%(levelname)s] %(name)s - %(message)s',
         level=logging.INFO
     )
+    # Use mixed precision for speedup
+    policy = mixed_precision.Policy('mixed_float16')
+    mixed_precision.set_global_policy(policy)
+
+    tensorflow.config.optimizer.set_jit("autoclustering")
 
     (probabilities, y_true, classes) = Experiment(**kwargs).run()
 
