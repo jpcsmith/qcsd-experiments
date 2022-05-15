@@ -9,7 +9,7 @@ rule ml_eval_brows__plot:
     input:
         expand(
             "results/ml-eval-brows/defence~{setting}/classifier~{classifier}/predictions.csv",
-            setting=["front", "undefended"], classifier=["kfp", "varcnn"]
+            setting=["front", "undefended"], classifier=["kfp", "dfnet", "varcnn"]
         )
     params:
         with_legend=True,

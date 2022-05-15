@@ -19,7 +19,7 @@ rule ml_eval_conn__plot:
             "results/ml-eval-conn/defence~{{defence}}/classifier~{classifier}/predictions.csv",
             "results/ml-eval-conn/defence~simulated-{{defence}}/classifier~{classifier}/predictions.csv",
             "results/ml-eval-conn/defence~undefended/classifier~{classifier}/predictions.csv",
-        ], classifier=["kfp"])
+        ], classifier=["kfp", "dfnet", "varcnn"])
     params:
         with_legend=lambda w: w["defence"] == "front"
     notebook:

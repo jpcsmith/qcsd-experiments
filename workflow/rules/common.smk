@@ -95,8 +95,23 @@ rule predict__varcnn:
     threads:
         get_threads_for_classifier({"classifier": "varcnn"})
     shell:
-        "workflow/scripts/evaluate_tuned_varcnn.py --verbose 0 {wildcards.feature_type}"
-        " {input} > {output} 2> {log}"
+        "workflow/scripts/evaluate_tuned_varcnn.py {wildcards.feature_type} {input}"
+        " > {output} 2> {log}"
+
+
+rule predict__dfnet:
+    """Perform hyperparameter validation and predictions for the Deep Fingerprinting
+    classifier (pattern rule)."""
+    output:
+        "{path}/classifier~dfnet/predictions.csv"
+    input:
+        "{path}/dataset.h5"
+    log:
+        "{path}/classifier~dfnet/predictions.log"
+    threads:
+        get_threads_for_classifier({"classifier": "dfnet"})
+    shell:
+        "workflow/scripts/evaluate_tuned_dfnet.py {input} > {output} 2> {log}"
 
 
 rule extract_features__kfp:
