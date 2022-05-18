@@ -7,8 +7,10 @@ file located at DATASET_PATH and the probability predictions are
 written in CSV format to OUTFILE (defaults to stdout).
 
 Options:
-    --skip-tuning
-        Do not tune and instead use parameters from the original paper.
+    --hyperparams <val>
+        Either the string 'tune' to perform hyperparameter tuning or a
+        string of the format 'key1=value1,key2=value2' describing the
+        hyperparameters to use [default: tune].
     --verbose <val>
         Set the verbosity of the gridsearch and classifier. A value of
         0 disables output whereas 3 produces all output [default: 0].
@@ -18,7 +20,7 @@ import time
 import logging
 import dataclasses
 from pathlib import Path
-from typing import Optional, ClassVar, Sequence
+from typing import Optional, ClassVar, Sequence, Union
 
 import h5py
 import numpy as np
@@ -35,12 +37,17 @@ from lab.metrics import rprecision_score, recall_score
 import tensorflow
 
 from common import doceasy
-from common.doceasy import Use, Or
+from common.doceasy import Use, Or, And
 
 MAX_RAND_SEED: int = 10_000
 N_META_FEATURES: int = 12
 MAX_EPOCHS: int = 150
 FEATURE_EXTRACTION_BATCH_SIZE: int = 5000
+
+# Hyperparameters from the paper
+DEFAULT_N_PACKETS: int = 5000
+DEFAULT_LEARNING_RATE: float = 0.001
+DEFAULT_LR_DECAY: float = np.sqrt(0.1)
 
 
 def main(outfile, **kwargs):
@@ -83,8 +90,8 @@ class Experiment:
     # Random seed for the experiment
     seed: int = 7121
 
-    # Whether to skip hyperparameter tuning
-    skip_tuning: bool = False
+    # Hyperparams to use if not "tune"
+    hyperparams: Union[str, dict] = "tune"
 
     # Hyperparameters to search
     n_packet_parameters: Sequence[int] = (5_000, 7_500, 10_000)
@@ -123,7 +130,8 @@ class Experiment:
             random_state=self.seeds_["train_test"]
         )
 
-        if not self.skip_tuning:
+        if self.hyperparams == "tune":
+            self.logger.info("Performing hyperparameter tuning ...")
             # Perform tuning to determine the number of packets to use
             n_packets = self.tune_n_packets(
                 x_train, y_train, n_classes=n_classes)
@@ -136,17 +144,27 @@ class Experiment:
                 x_train, y_train, n_classes=n_classes, n_packets=n_packets
             )
         else:
-            self.logger.warning("Skipping tuning ...")
-            n_packets = 5000
+            assert isinstance(self.hyperparams, dict)
+            n_packets = self.hyperparams.get("n_packets", DEFAULT_N_PACKETS)
+            learning_rate = self.hyperparams.get(
+                "learning_rate", DEFAULT_LEARNING_RATE
+            )
+            lr_decay = self.hyperparams.get("lr_decay", DEFAULT_LR_DECAY)
+            self.logger.info(
+                "Using n_packets=%s, learning_rate=%.3g, and lr_decay=%.3g",
+                n_packets, learning_rate, lr_decay
+            )
+
             x_train = first_n_packets(x_train, n_packets=n_packets)
             x_test = first_n_packets(x_test, n_packets=n_packets)
 
             classifier = varcnn.VarCNNClassifier(
                 n_classes=n_classes, n_meta_features=N_META_FEATURES,
                 n_packet_features=n_packets,
-                callbacks=varcnn.default_callbacks(),
+                callbacks=varcnn.default_callbacks(lr_decay=lr_decay),
                 epochs=MAX_EPOCHS, tag=f"varcnn-{self.feature_type}",
                 validation_split=self.validation_split,
+                learning_rate=learning_rate,
                 verbose=min(self.verbose, 1),
             )
             classifier.fit(x_train, y_train)
@@ -299,5 +317,9 @@ if __name__ == "__main__":
         "FEATURE_TYPE": Or("time", "sizes"),
         "DATASET_PATH": Use(Path),
         "--verbose": Use(int),
-        "--skip-tuning": bool,
+        "--hyperparams": Or("tune", And(doceasy.Mapping(), {
+            doceasy.Optional("n_packets"): Use(int),
+            doceasy.Optional("learning_rate"): Use(float),
+            doceasy.Optional("lr_decay"): Use(float)
+        }))
     }))
