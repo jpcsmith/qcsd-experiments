@@ -25,7 +25,7 @@ def build_neqo_args(exp_config):
                 "--front-peak-min", args["peak_minimum"],
             ]
             if "use_empty_resources" in args:
-              result += ["--use-empty-resources", str(args["use_empty_resources"]).lower()]
+                result += ["--use-empty-resources", str(args["use_empty_resources"]).lower()]
             return result
         if wildcards["defence"] == "tamaraw":
             args = exp_config["tamaraw"]
@@ -37,9 +37,19 @@ def build_neqo_args(exp_config):
                 "--tamaraw-modulo", args["packet_multiple"],
             ]
             if "msd_limit_excess" in args:
-              result += ["--msd-limit-excess", args["msd_limit_excess"]]
+                result += ["--msd-limit-excess", args["msd_limit_excess"]]
             if "use_empty_resources" in args:
-              result += ["--use-empty-resources", str(args["use_empty_resources"]).lower()]
+                result += ["--use-empty-resources", str(args["use_empty_resources"]).lower()]
+            if "max_udp_payload_size" in args:
+                result += ["--max-udp-payload-size", args["max_udp_payload_size"]]
+
+            if "add_noise" in args:
+                result += [
+                    "--add-noise",
+                    "--noise-chance", args["noise_chance"],
+                    f"--noise-bound-lower={args['noise_bound_lower']}",
+                    f"--noise-bound-upper={args['noise_bound_upper']}",
+                ]
             return result
         if wildcards["defence"] == "undefended":
             return ["--defence", "none"]
@@ -93,7 +103,7 @@ rule predict__varcnn:
     log:
         "{path}/classifier~varcnn-{feature_type}/predictions.log"
     threads:
-        get_threads_for_classifier({"classifier": "varcnn"})
+        workflow.cores
     shell:
         "workflow/scripts/evaluate_tuned_varcnn.py {wildcards.feature_type} {input}"
         " > {output} 2> {log}"
@@ -109,9 +119,9 @@ rule predict__dfnet:
     log:
         "{path}/classifier~dfnet/predictions.log"
     threads:
-        get_threads_for_classifier({"classifier": "dfnet"})
+        workflow.cores
     shell:
-        "workflow/scripts/evaluate_tuned_dfnet.py {input} > {output} 2> {log}"
+        "workflow/scripts/evaluate_tuned_df.py {input} > {output} 2> {log}"
 
 
 rule extract_features__kfp:
