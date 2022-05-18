@@ -26,6 +26,16 @@ debug_config = {
             "noise_bound_upper": 160,
         },
     },
+    "noised_tamaraw-0.4-skewed-beta": {
+        "tamaraw": {
+            **tamaraw_defaults,
+            "add_noise": True,
+            "noise_chance": 0.4,
+            "noise_bound_lower": -900,
+            "noise_bound_upper": 0,
+            "max_udp_payload_size": 1272
+        },
+    },
     "higher_pkt_size": {
         "tamaraw": {
             **tamaraw_defaults,

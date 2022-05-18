@@ -93,6 +93,17 @@ rule predict__kfp:
         " {input} > {output[0]} 2> {log[0]}"
 
 
+# rule predict__varcnn__undefended:
+#     """Perform predictions for either the soze or time component of the Var-CNN
+#     classifier using the hyperparameters from the paper."""
+#     output:
+#         "{path}/defence~undefended/classifier~varcnn-{feature_type}/predictions.csv"
+#     input:
+#         "{path}/defence~undefended/dataset.h5"
+#     log:
+#         "{path}/defence~undefended/classifier~varcnn-{feature_type}/predictions.log"
+
+
 rule predict__varcnn:
     """Perform hyperparameter validation and predictions for either the sizes or time
     component of the Var-CNN classifier (pattern rule)."""
