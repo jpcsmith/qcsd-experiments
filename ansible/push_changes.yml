@@ -3,6 +3,7 @@
   hosts:
     - wg_clients
     - ml_host
+    - zapdos
   gather_facts: false
   tasks:
     - import_tasks: tasks/sync_experiment.yml
