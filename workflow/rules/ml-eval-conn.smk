@@ -8,6 +8,25 @@ rule ml_eval_conn__all:
         "results/plots/ml-eval-conn-front.png",
 
 
+def ml_eval_conn__plot__inputs(wildcards, flatten: bool = False):
+    defence = wildcards["defence"]
+    base = "results/ml-eval-conn"
+    result = {
+        title: {
+            "QCSD": f"{base}/defence~{defence}/classifier~{classifier}/predictions.csv",
+            "Simulated": f"{base}/defence~simulated-{defence}/classifier~{classifier}/predictions.csv",
+            "Undef.": f"{base}/defence~undefended/classifier~{classifier}/predictions.csv",
+        }
+        for (classifier, title) in [
+            ("kfp", "$k$-FP"), ("varcnn", "Var-CNN"), ("varcnn-time", "Var-CNN(T)"),
+            ("varcnn-sizes", "Var-CNN(S)"),
+        ]
+    }
+    if flatten:
+        result = [v for values in result.values() for v in values.values()]
+    return result
+
+
 rule ml_eval_conn__plot:
     """Plot the defended, simulated, and undefended settings for the given defence for
     all classifiers (pattern rule)."""
@@ -15,12 +34,10 @@ rule ml_eval_conn__plot:
         "results/plots/ml-eval-conn-{defence}.png",
         "results/plots/ml-eval-conn-{defence}.pgf",
     input:
-        expand([
-            "results/ml-eval-conn/defence~{{defence}}/classifier~{classifier}/predictions.csv",
-            "results/ml-eval-conn/defence~simulated-{{defence}}/classifier~{classifier}/predictions.csv",
-            "results/ml-eval-conn/defence~undefended/classifier~{classifier}/predictions.csv",
-        ], classifier=["kfp", "dfnet", "varcnn"])
+        lambda w: ml_eval_conn__plot__inputs(w, flatten=True)
     params:
+        layout=ml_eval_conn__plot__inputs,
+        line_styles={"QCSD": "solid", "Simulated": "dotted", "Undef.": "dashdot"},
         with_legend=lambda w: w["defence"] == "front"
     notebook:
         "../notebooks/result-analysis-curve.ipynb"

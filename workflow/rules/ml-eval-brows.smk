@@ -1,19 +1,41 @@
 ml_eb_config = config["experiment"]["ml_eval_brows"]
 
 
+rule ml_eval_brows__all:
+    input:
+        "results/plots/ml-eval-brows-front.png"
+
+
+def ml_eval_brows__plot__inputs(wildcards, flatten: bool = False):
+    defence = wildcards["defence"]
+    base = "results/ml-eval-brows"
+    result = {
+        title: {
+            "QCSD": f"{base}/defence~{defence}/classifier~{classifier}/predictions.csv",
+            "Undef.": f"{base}/defence~undefended/classifier~{classifier}/predictions.csv",
+        }
+        for (classifier, title) in [
+            ("kfp", "$k$-FP"), ("varcnn", "Var-CNN"), ("varcnn-time", "Var-CNN(T)"),
+            ("varcnn-sizes", "Var-CNN(S)"),
+        ]
+    }
+    if flatten:
+        result = [v for values in result.values() for v in values.values()]
+    return result
+
+
 rule ml_eval_brows__plot:
     """Plot the defended and undefended settings for FRONT and all classifiers in the
     browser setting (static rule)."""
     output:
-        "results/plots/ml-eval-brows-front.png"
+        "results/plots/ml-eval-brows-{defence}.png",
+        "results/plots/ml-eval-brows-{defence}.pgf"
     input:
-        expand(
-            "results/ml-eval-brows/defence~{setting}/classifier~{classifier}/predictions.csv",
-            setting=["front", "undefended"], classifier=["kfp", "dfnet", "varcnn"]
-        )
+        lambda w: ml_eval_brows__plot__inputs(w, flatten=True)
     params:
+        layout=ml_eval_brows__plot__inputs,
+        line_styles={"QCSD": "solid", "Undef.": "dashdot"},
         with_legend=True,
-        with_simulated=False
     notebook:
         "../notebooks/result-analysis-curve.ipynb"
 
