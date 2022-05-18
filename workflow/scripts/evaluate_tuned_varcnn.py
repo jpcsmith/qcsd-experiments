@@ -7,6 +7,8 @@ file located at DATASET_PATH and the probability predictions are
 written in CSV format to OUTFILE (defaults to stdout).
 
 Options:
+    --skip-tuning
+        Do not tune and instead use parameters from the original paper.
     --verbose <val>
         Set the verbosity of the gridsearch and classifier. A value of
         0 disables output whereas 3 produces all output [default: 0].
@@ -31,7 +33,6 @@ from lab.feature_extraction.trace import (
 from lab.classifiers import varcnn
 from lab.metrics import rprecision_score, recall_score
 import tensorflow
-from tensorflow.keras import mixed_precision
 
 from common import doceasy
 from common.doceasy import Use, Or
@@ -48,10 +49,7 @@ def main(outfile, **kwargs):
         format='[%(asctime)s] [%(levelname)s] %(name)s - %(message)s',
         level=logging.INFO
     )
-    # Use mixed precision for speedup
-    policy = mixed_precision.Policy('mixed_float16')
-    mixed_precision.set_global_policy(policy)
-
+    # Use autoclustering for speedup
     tensorflow.config.optimizer.set_jit("autoclustering")
 
     (probabilities, y_true, classes) = Experiment(**kwargs).run()
@@ -84,6 +82,9 @@ class Experiment:
 
     # Random seed for the experiment
     seed: int = 7121
+
+    # Whether to skip hyperparameter tuning
+    skip_tuning: bool = False
 
     # Hyperparameters to search
     n_packet_parameters: Sequence[int] = (5_000, 7_500, 10_000)
@@ -122,16 +123,33 @@ class Experiment:
             random_state=self.seeds_["train_test"]
         )
 
-        # Perform tuning to determine the number of packets to use
-        n_packets = self.tune_n_packets(x_train, y_train, n_classes=n_classes)
-        # Reduce the training and testing features to the found num of packets
-        x_train = first_n_packets(x_train, n_packets=n_packets)
-        x_test = first_n_packets(x_test, n_packets=n_packets)
+        if not self.skip_tuning:
+            # Perform tuning to determine the number of packets to use
+            n_packets = self.tune_n_packets(
+                x_train, y_train, n_classes=n_classes)
+            # Reduce the training and testing features to the found num packets
+            x_train = first_n_packets(x_train, n_packets=n_packets)
+            x_test = first_n_packets(x_test, n_packets=n_packets)
 
-        # Tune other hyperparameters and fit the final estimator
-        classifier = self.tune_hyperparameters(
-            x_train, y_train, n_classes=n_classes, n_packets=n_packets
-        )
+            # Tune other hyperparameters and fit the final estimator
+            classifier = self.tune_hyperparameters(
+                x_train, y_train, n_classes=n_classes, n_packets=n_packets
+            )
+        else:
+            self.logger.warning("Skipping tuning ...")
+            n_packets = 5000
+            x_train = first_n_packets(x_train, n_packets=n_packets)
+            x_test = first_n_packets(x_test, n_packets=n_packets)
+
+            classifier = varcnn.VarCNNClassifier(
+                n_classes=n_classes, n_meta_features=N_META_FEATURES,
+                n_packet_features=n_packets,
+                callbacks=varcnn.default_callbacks(),
+                epochs=MAX_EPOCHS, tag=f"varcnn-{self.feature_type}",
+                validation_split=self.validation_split,
+                verbose=min(self.verbose, 1),
+            )
+            classifier.fit(x_train, y_train)
 
         # Predict the classes for the test set
         probabilities = classifier.predict_proba(x_test)
@@ -281,4 +299,5 @@ if __name__ == "__main__":
         "FEATURE_TYPE": Or("time", "sizes"),
         "DATASET_PATH": Use(Path),
         "--verbose": Use(int),
+        "--skip-tuning": bool,
     }))

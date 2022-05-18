@@ -29,7 +29,6 @@ from lab.feature_extraction.trace import ensure_non_ragged
 from lab.classifiers import dfnet
 from lab.metrics import rprecision_score, recall_score
 import tensorflow
-from tensorflow.keras import mixed_precision
 
 from common import doceasy
 from common.doceasy import Use
@@ -44,10 +43,7 @@ def main(outfile, **kwargs):
         format='[%(asctime)s] [%(levelname)s] %(name)s - %(message)s',
         level=logging.INFO
     )
-    # Use mixed precision for speedup
-    policy = mixed_precision.Policy('mixed_float16')
-    mixed_precision.set_global_policy(policy)
-
+    # Use autoclustering for speedup
     tensorflow.config.optimizer.set_jit("autoclustering")
 
     (probabilities, y_true, classes) = Experiment(**kwargs).run()
@@ -79,8 +75,8 @@ class Experiment:
     # Hyperparameters to search
     n_packet_parameters: Sequence[int] = (5_000, 7_500, 10_000)
     tuned_parameters: dict = dataclasses.field(default_factory=lambda: {
-        "epochs": [15, 30, 40, 50],
-        "learning_rate": [0.1, 0.01, 0.002, 0.0001],
+        "epochs": [15, 30, 45],
+        "learning_rate": [0.1, 0.01, 0.002],
     })
 
     # Other seeds which are chosen for different operations
