@@ -105,3 +105,18 @@ experiment:
     splits: {n_folds: 5, seed: 438, validation_size: 0.1}
     classifiers: ["kfp", "dfnet", "varcnn"]
     front: *front-default
+
+  improved_tamaraw:
+    dataset:
+      n_monitored: 100
+      n_instances: 100
+      n_unmonitored: 1000
+    tamaraw:
+      <<: *tamaraw-default
+      packet_size: 1200
+      msd_limit_excess: 500
+      add_noise: true
+      noise_chance: 0.4
+      noise_bound_lower: -900
+      noise_bound_upper: 0
+      max_udp_payload_size: 1272
