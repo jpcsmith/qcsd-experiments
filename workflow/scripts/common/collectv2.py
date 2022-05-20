@@ -14,7 +14,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class TaggingLogger(logging.LoggerAdapter):
-    """Adds a tag to messages."""
+    """Adds a tag to log messages."""
     def process(self, msg, kwargs):
         return '[%s] %s' % (self.extra['tag'], msg), kwargs
 
@@ -26,7 +26,7 @@ TargetFn = Callable[[Path, Path, int, int], bool]
 
 
 class TooManyFailuresException(RuntimeError):
-    pass
+    """Raised if the progress tracker reports too many failures."""
 
 
 class Collector:
@@ -37,6 +37,7 @@ class Collector:
         input_file: Path,
         output_dir: Path,
         region_queues: Tuple[Queue, ...],
+        *,
         delay: float = 0,
     ):
         self.target = target
@@ -50,6 +51,7 @@ class Collector:
 
     @property
     def n_regions(self) -> int:
+        """Return the number of regions."""
         return len(self.region_queues)
 
     def _init_directories(self):
@@ -59,7 +61,7 @@ class Collector:
             (region_dir / "status~success").mkdir(exist_ok=True)
             (region_dir / "status~failure").mkdir(exist_ok=True)
 
-    def _check_for_prior_successes(self, progress):
+    def _check_for_prior_samples(self, progress):
         """Checks for prior successful runs."""
         for i in range(self.n_regions):
             success_dir = (self.output_dir / f"region_id~{i}/status~success/")
@@ -67,7 +69,16 @@ class Collector:
             self.log.info("Found %d successes for region %d", n_successes, i)
             progress.completed[i] = n_successes
 
-    async def run(self, n_instances: int, max_failures: int = 1):
+        if np.sum(progress.completed) == 0:
+            # No successes, so all failures were sequential
+            n_failures = sum(
+                1 for _ in
+                self.output_dir.glob("region_id~*/status~failure/**/run~*")
+            )
+            self.log.info("Found %d sequential failures", n_failures)
+            progress.overall_failures = n_failures
+
+    async def run(self, n_instances: int, max_failures: int = 3):
         """Run collection until there are at least n_instances collected
         across the various regions.
         """
@@ -79,14 +90,17 @@ class Collector:
             n_instances=n_instances, n_regions=len(self.region_queues),
             max_failures=max_failures,
         )
-        self._check_for_prior_successes(progress)
+        self._check_for_prior_samples(progress)
 
         if progress.is_complete():
             self.log.info("Already complete, doing nothing.")
             return
+        if progress.has_too_many_failures():
+            self.log.info("Collection already has too many failures.")
+            raise TooManyFailuresException()
 
         region_tasks = [
-            asyncio.create_task(self.collect_region(i, progress), name=f"Region-{i}")
+            asyncio.create_task(self.collect_region(i, progress))
             for i in range(self.n_regions)
         ]
 
@@ -96,8 +110,7 @@ class Collector:
             # completed due to the failure.
             await asyncio.gather(*region_tasks)
         except Exception:
-            # If one of the region collections observe too many failures, then
-            # cancel all regions.
+            # If one of the region collections fails then cancel all regions.
             for task in (t for t in region_tasks if not t.done()):
                 with contextlib.suppress(asyncio.CancelledError):
                     self.log.warning("Cancelling task %s", task.get_name())
@@ -138,10 +151,15 @@ class Collector:
                 logger.debug("Run failed: %d", run_id)
                 shutil.move(str(output_dir), region_dir / "status~failure")
                 progress.failure(region_id)
+
+                if progress.has_too_many_failures():
+                    raise TooManyFailuresException()
+
             logger.debug("Released client: %d", client_id)
 
             run_id += 1
             await asyncio.sleep(self.delay)
+        logger.info("Completed collection for region.")
 
     @contextlib.asynccontextmanager
     async def get_region_client(self, region_id: int):
@@ -171,7 +189,7 @@ class ProgressTracker:
     #: The total number of regions
     n_regions: int = 1
     #: The maximum number of failures
-    max_failures: int = 1
+    max_failures: int = 3
     #: If use_region is non-negative, then all of the instances will be
     #: collected via a single region.
     use_only_region: int = -1
@@ -191,6 +209,12 @@ class ProgressTracker:
         if self.completed is None:
             self.completed = np.zeros(self.n_regions, int)
         assert self.completed.shape == (self.n_regions, )
+
+    def has_too_many_failures(self) -> bool:
+        """Return True iff the number of sequential failures has
+        hit the maximum.
+        """
+        return self.sequential_failures() >= self.max_failures
 
     def use_all_regions(self):
         """Reset the use_only_region variable."""
