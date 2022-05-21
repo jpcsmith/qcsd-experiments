@@ -65,9 +65,6 @@ async def test_collects_regions(tmp_path: Path):
 async def test_continues_collection(tmp_path: Path):
     """It should continue an already partially started collection."""
     n_instances = 8
-    collector = TargetRunner(
-        touch_target, Path(), tmp_path, create_queues(N_REGIONS, 1)
-    )
 
     all_files = [
         (tmp_path / f"region_id~{i}/status~success/run~{j}/touch")
@@ -81,6 +78,9 @@ async def test_continues_collection(tmp_path: Path):
         path.parent.mkdir(parents=True)
         path.write_text("completed")
 
+    collector = TargetRunner(
+        touch_target, Path(), tmp_path, create_queues(N_REGIONS, 1)
+    )
     is_success = await collector.run(n_instances)
     assert is_success
 
@@ -147,15 +147,15 @@ async def test_too_many_prior_failures(
     with no successes.
     """
     n_instances = 1
-    collector = TargetRunner(
-        touch_target, Path(), tmp_path, create_queues(N_REGIONS, 1)
-    )
 
     for run_id in range(n_failures):
         path = tmp_path / f"region_id~0/status~failure/run~{run_id}/touch"
         path.parent.mkdir(parents=True)
         path.write_text("failed")
 
+    collector = TargetRunner(
+        touch_target, Path(), tmp_path, create_queues(N_REGIONS, 1)
+    )
     is_success = await collector.run(n_instances, max_failures=max_failures)
     assert is_success == (not should_fail)
 
@@ -164,9 +164,6 @@ async def test_too_many_prior_failures(
 async def test_already_complete(tmp_path: Path):
     """It should not run if already complete."""
     n_instances = 3
-    collector = TargetRunner(
-        touch_target, Path(), tmp_path, create_queues(N_REGIONS, 1)
-    )
 
     all_files = [
         (tmp_path / f"region_id~{i}/status~success/run~{j}/touch")
@@ -179,6 +176,9 @@ async def test_already_complete(tmp_path: Path):
         path.parent.mkdir(parents=True)
         path.write_text("completed")
 
+    collector = TargetRunner(
+        touch_target, Path(), tmp_path, create_queues(N_REGIONS, 1)
+    )
     is_success = await collector.run(n_instances)
     assert is_success
 
@@ -274,8 +274,8 @@ def test_should_assign_unmonitored_region(tmp_path):
     assert not collector.is_monitored("1")
     assert not collector.is_monitored("3")
 
-    assert collector.runners["1"][0].progress_.use_only_region == 0
-    assert collector.runners["3"][0].progress_.use_only_region == 2
+    assert collector.get_region("1") == 0
+    assert collector.get_region("3") == 2
 
 
 def test_should_init_runners(tmp_path):
@@ -298,13 +298,7 @@ def test_should_init_runners(tmp_path):
         assert not collector.is_monitored(str(i))
 
 
-# TODO Should be assigned to region which was already collected
-
-
 # TODO: Need to balance the regions
 # TODO: Balance the regions when reassigning failures
 # TODO: Need to check sequential failures in a region with no successes
-# TODO: Ensure that when resuming we pick monitored and unonitored samples
-# correctly so that we dont waste already having a 100 samples on an
-# unmonitored case
 # TODO: Need to set the number of threads to use
