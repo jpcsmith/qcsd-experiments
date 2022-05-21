@@ -1,4 +1,6 @@
 """Tests for the collectv2 module."""
+import random
+import threading
 from pathlib import Path
 from asyncio import Queue
 from typing import Tuple
@@ -26,6 +28,27 @@ def failing_target(infile, output_dir, region_id, client_id):  # pylint: disable
     return True
 
 
+def randomly_failing_target(chance: float, seed):
+    """A thread safe target which randomly fail with the specified chance."""
+    assert 0 < chance < 1
+
+    rng = random.Random(seed)
+    lock = threading.Lock()
+
+    # pylint: disable=unused-argument
+    def _randomly_failing_target(infile, output_dir, region_id, client_id):
+        with lock:
+            value = rng.random()
+
+        if value <= chance:
+            (output_dir / "touch").write_text("failed")
+            return False
+        (output_dir / "touch").write_text("succeded")
+        return True
+
+    return _randomly_failing_target
+
+
 class TargetError(RuntimeError):
     """An arbitrary error raised by the target."""
 
@@ -49,7 +72,7 @@ async def test_collects_regions(tmp_path: Path):
     """It should collect the specified number of files across all regions."""
     n_instances = 5
     collector = TargetRunner(
-        touch_target, Path(), tmp_path, create_queues(N_REGIONS, 1)
+        touch_target, Path(), tmp_path, create_queues(N_REGIONS, 1), delay=0
     )
     is_success = await collector.run(n_instances)
     assert is_success
@@ -79,7 +102,7 @@ async def test_continues_collection(tmp_path: Path):
         path.write_text("completed")
 
     collector = TargetRunner(
-        touch_target, Path(), tmp_path, create_queues(N_REGIONS, 1)
+        touch_target, Path(), tmp_path, create_queues(N_REGIONS, 1), delay=0
     )
     is_success = await collector.run(n_instances)
     assert is_success
@@ -100,7 +123,7 @@ async def test_continues_with_failures(tmp_path: Path):
     """It should continue an already partially started collection."""
     n_instances = 9
     collector = TargetRunner(
-        touch_target, Path(), tmp_path, create_queues(N_REGIONS, 1)
+        touch_target, Path(), tmp_path, create_queues(N_REGIONS, 1), delay=0
     )
 
     all_files = [
@@ -154,10 +177,32 @@ async def test_too_many_prior_failures(
         path.write_text("failed")
 
     collector = TargetRunner(
-        touch_target, Path(), tmp_path, create_queues(N_REGIONS, 1)
+        touch_target, Path(), tmp_path, create_queues(N_REGIONS, 1), delay=0
     )
     is_success = await collector.run(n_instances, max_failures=max_failures)
     assert is_success == (not should_fail)
+
+
+@pytest.mark.asyncio
+async def test_too_many_region_failures(tmp_path):
+    """It should fail due to too many failures in a single region."""
+    n_failures = 3
+    for (region_id, status, count) in [
+        (0, "failure", n_failures), (1, "success", 4)
+    ]:
+        for run_id in range(count):
+            path = (
+                tmp_path / f"region_id~{region_id}" / f"status~{status}"
+                / f"run~{run_id}" / "touch"
+            )
+            path.parent.mkdir(parents=True)
+            path.write_text("failed")
+
+    collector = TargetRunner(
+        touch_target, Path(), tmp_path, create_queues(N_REGIONS, 1), delay=0
+    )
+    is_success = await collector.run(10, max_failures=n_failures)
+    assert not is_success
 
 
 @pytest.mark.asyncio
@@ -177,7 +222,7 @@ async def test_already_complete(tmp_path: Path):
         path.write_text("completed")
 
     collector = TargetRunner(
-        touch_target, Path(), tmp_path, create_queues(N_REGIONS, 1)
+        touch_target, Path(), tmp_path, create_queues(N_REGIONS, 1), delay=0
     )
     is_success = await collector.run(n_instances)
     assert is_success
@@ -193,7 +238,8 @@ async def test_already_complete(tmp_path: Path):
 async def test_cleanup_on_error(tmp_path):
     """It should cancel all tasks on error."""
     collector = TargetRunner(
-        exception_target, Path(), tmp_path, create_queues(N_REGIONS, 1)
+        exception_target, Path(), tmp_path, create_queues(N_REGIONS, 1),
+        delay=0
     )
 
     with pytest.raises(TargetError):
@@ -205,7 +251,7 @@ async def test_success_with_failures(tmp_path):
     """Should successfully complete even with failures."""
     n_instances = 6
     collector = TargetRunner(
-        failing_target, Path(), tmp_path, create_queues(N_REGIONS, 3)
+        failing_target, Path(), tmp_path, create_queues(N_REGIONS, 3), delay=0
     )
 
     is_success = await collector.run(n_instances)
@@ -218,7 +264,7 @@ async def test_should_abort_on_failures(tmp_path):
     n_instances = 6
     # With 1 client, client_id=0, region_id=0 should always fail
     collector = TargetRunner(
-        failing_target, Path(), tmp_path, create_queues(N_REGIONS, 1)
+        failing_target, Path(), tmp_path, create_queues(N_REGIONS, 1), delay=0
     )
 
     is_success = await collector.run(n_instances)
@@ -258,6 +304,7 @@ def test_should_detect_prior(tmp_path):
 
 
 def test_should_assign_unmonitored_region(tmp_path):
+    """It should assign unmonitored regions to prior collections."""
     indir, outdir = create_inputs(tmp_path, 10)
     for sample, region_id, n_runs in [("1", 0, 2), ("3", 2, 1)]:
         for i in range(n_runs):
@@ -298,7 +345,21 @@ def test_should_init_runners(tmp_path):
         assert not collector.is_monitored(str(i))
 
 
-# TODO: Need to balance the regions
-# TODO: Balance the regions when reassigning failures
-# TODO: Need to check sequential failures in a region with no successes
+@pytest.mark.asyncio
+@pytest.mark.parametrize("n_inputs,n_monitored,n_unmonitored", [(20, 4, 6)])
+async def test_runs_to_completion(
+    tmp_path, n_inputs, n_monitored, n_unmonitored
+):
+    """It should successfully run a collection in spite of failures."""
+    indir, outdir = create_inputs(tmp_path, n_inputs)
+    collector = Collector(
+        randomly_failing_target(0.1, seed=32), indir, outdir,
+        n_regions=2, n_instances=20, n_clients_per_region=2,
+        n_monitored=n_monitored, n_unmonitored=n_unmonitored, max_failures=2,
+        delay=0.01
+    )
+
+    await collector.run()
+
+
 # TODO: Need to set the number of threads to use
