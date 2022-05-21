@@ -5,7 +5,7 @@ from typing import Tuple
 
 import pytest
 
-from common.collectv2 import Collector, TooManyFailuresException
+from common.collectv2 import TargetRunner
 
 N_REGIONS: int = 3
 
@@ -48,10 +48,11 @@ def create_queues(n_regions: int, n_clients: int):
 async def test_collects_regions(tmp_path: Path):
     """It should collect the specified number of files across all regions."""
     n_instances = 5
-    collector = Collector(
+    collector = TargetRunner(
         touch_target, Path(), tmp_path, create_queues(N_REGIONS, 1)
     )
-    await collector.run(n_instances)
+    is_success = await collector.run(n_instances)
+    assert is_success
     assert (tmp_path / "region_id~0/status~success/run~0/touch").is_file()
     assert (tmp_path / "region_id~1/status~success/run~0/touch").is_file()
     assert (tmp_path / "region_id~2/status~success/run~0/touch").is_file()
@@ -64,7 +65,7 @@ async def test_collects_regions(tmp_path: Path):
 async def test_continues_collection(tmp_path: Path):
     """It should continue an already partially started collection."""
     n_instances = 8
-    collector = Collector(
+    collector = TargetRunner(
         touch_target, Path(), tmp_path, create_queues(N_REGIONS, 1)
     )
 
@@ -80,7 +81,8 @@ async def test_continues_collection(tmp_path: Path):
         path.parent.mkdir(parents=True)
         path.write_text("completed")
 
-    await collector.run(n_instances)
+    is_success = await collector.run(n_instances)
+    assert is_success
 
     # Check that the prior completed still contain the same text
     for path in already_complete:
@@ -97,7 +99,7 @@ async def test_continues_collection(tmp_path: Path):
 async def test_continues_with_failures(tmp_path: Path):
     """It should continue an already partially started collection."""
     n_instances = 9
-    collector = Collector(
+    collector = TargetRunner(
         touch_target, Path(), tmp_path, create_queues(N_REGIONS, 1)
     )
 
@@ -120,7 +122,8 @@ async def test_continues_with_failures(tmp_path: Path):
         path.parent.mkdir(parents=True)
         path.write_text("completed")
 
-    await collector.run(n_instances)
+    is_success = await collector.run(n_instances)
+    assert is_success
 
     # Check that the prior completed still contain the same text
     for path in already_complete:
@@ -144,7 +147,7 @@ async def test_too_many_prior_failures(
     with no successes.
     """
     n_instances = 1
-    collector = Collector(
+    collector = TargetRunner(
         touch_target, Path(), tmp_path, create_queues(N_REGIONS, 1)
     )
 
@@ -153,18 +156,15 @@ async def test_too_many_prior_failures(
         path.parent.mkdir(parents=True)
         path.write_text("failed")
 
-    if should_fail:
-        with pytest.raises(TooManyFailuresException):
-            await collector.run(n_instances, max_failures=max_failures)
-    else:
-        await collector.run(n_instances, max_failures=max_failures)
+    is_success = await collector.run(n_instances, max_failures=max_failures)
+    assert is_success == (not should_fail)
 
 
 @pytest.mark.asyncio
 async def test_already_complete(tmp_path: Path):
     """It should not run if already complete."""
     n_instances = 3
-    collector = Collector(
+    collector = TargetRunner(
         touch_target, Path(), tmp_path, create_queues(N_REGIONS, 1)
     )
 
@@ -179,7 +179,8 @@ async def test_already_complete(tmp_path: Path):
         path.parent.mkdir(parents=True)
         path.write_text("completed")
 
-    await collector.run(n_instances)
+    is_success = await collector.run(n_instances)
+    assert is_success
 
     # Check that the prior completed still contain the same text
     for path in already_complete:
@@ -190,7 +191,7 @@ async def test_already_complete(tmp_path: Path):
 
 async def test_cleanup_on_error(tmp_path):
     """It should cancel all tasks on error."""
-    collector = Collector(
+    collector = TargetRunner(
         exception_target, Path(), tmp_path, create_queues(N_REGIONS, 1)
     )
 
@@ -201,20 +202,29 @@ async def test_cleanup_on_error(tmp_path):
 async def test_success_with_failures(tmp_path):
     """Should successfully complete even with failures."""
     n_instances = 6
-    collector = Collector(
+    collector = TargetRunner(
         failing_target, Path(), tmp_path, create_queues(N_REGIONS, 3)
     )
 
-    await collector.run(n_instances)
+    is_success = await collector.run(n_instances)
+    assert is_success
 
 
 async def test_should_abort_on_failures(tmp_path):
     """It should stop running after too many failures."""
     n_instances = 6
     # With 1 client, client_id=0, region_id=0 should always fail
-    collector = Collector(
+    collector = TargetRunner(
         failing_target, Path(), tmp_path, create_queues(N_REGIONS, 1)
     )
 
-    with pytest.raises(TooManyFailuresException):
-        await collector.run(n_instances)
+    is_success = await collector.run(n_instances)
+    assert not is_success
+
+# TODO: Need to balance the regions
+# TODO: Balance the regions when reassigning failures
+# TODO: Need to check sequential failures in a region with no successes
+# TODO: Ensure that when resuming we pick monitored and unonitored samples
+# correctly so that we dont waste already having a 100 samples on an
+# unmonitored case
+# TODO: Need to set the number of threads to use
