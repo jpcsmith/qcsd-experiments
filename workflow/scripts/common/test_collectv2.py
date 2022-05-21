@@ -5,7 +5,7 @@ from typing import Tuple
 
 import pytest
 
-from common.collectv2 import TargetRunner
+from common.collectv2 import TargetRunner, Collector
 
 N_REGIONS: int = 3
 
@@ -189,6 +189,7 @@ async def test_already_complete(tmp_path: Path):
         assert not path.exists()
 
 
+@pytest.mark.asyncio
 async def test_cleanup_on_error(tmp_path):
     """It should cancel all tasks on error."""
     collector = TargetRunner(
@@ -199,6 +200,7 @@ async def test_cleanup_on_error(tmp_path):
         await collector.run(10)
 
 
+@pytest.mark.asyncio
 async def test_success_with_failures(tmp_path):
     """Should successfully complete even with failures."""
     n_instances = 6
@@ -210,6 +212,7 @@ async def test_success_with_failures(tmp_path):
     assert is_success
 
 
+@pytest.mark.asyncio
 async def test_should_abort_on_failures(tmp_path):
     """It should stop running after too many failures."""
     n_instances = 6
@@ -220,6 +223,83 @@ async def test_should_abort_on_failures(tmp_path):
 
     is_success = await collector.run(n_instances)
     assert not is_success
+
+
+def create_inputs(path: Path, n_inputs: int):
+    """Create a directory for inputs at path and a directory for outputs.
+
+    Add n_inputs files to the input directory and return the
+    (input, output) paths.
+    """
+    input_dir = path / "inputs"
+    input_dir.mkdir()
+    output_dir = path / "outputs"
+    output_dir.mkdir()
+    for i in range(n_inputs):
+        (input_dir / f"{i}.json").touch()
+    return input_dir, output_dir
+
+
+def test_should_detect_prior(tmp_path):
+    """It should identify prior monitored/unmonitored assignments and
+    respect them.
+    """
+    indir, outdir = create_inputs(tmp_path, 10)
+    (outdir.with_suffix(".wip") / "setting~monitored/9/").mkdir(parents=True)
+    (outdir.with_suffix(".wip") / "setting~unmonitored/0/").mkdir(parents=True)
+
+    collector = Collector(
+        touch_target, indir, outdir, n_regions=N_REGIONS, n_instances=2,
+        n_clients_per_region=1, n_monitored=5, n_unmonitored=5, max_failures=1
+    )
+    collector.init_runners()
+    assert collector.is_monitored("9")
+    assert not collector.is_monitored("0")
+
+
+def test_should_assign_unmonitored_region(tmp_path):
+    indir, outdir = create_inputs(tmp_path, 10)
+    for sample, region_id, n_runs in [("1", 0, 2), ("3", 2, 1)]:
+        for i in range(n_runs):
+            (
+                outdir.with_suffix(".wip") / "setting~unmonitored" / sample
+                / f"region_id~{region_id}" / "status~success" / f"run~{i}"
+            ).mkdir(parents=True)
+
+    collector = Collector(
+        touch_target, indir, outdir, n_regions=N_REGIONS, n_instances=2,
+        n_clients_per_region=1, n_monitored=5, n_unmonitored=5, max_failures=1
+    )
+    collector.init_runners()
+    assert not collector.is_monitored("1")
+    assert not collector.is_monitored("3")
+
+    assert collector.runners["1"][0].progress_.use_only_region == 0
+    assert collector.runners["3"][0].progress_.use_only_region == 2
+
+
+def test_should_init_runners(tmp_path):
+    """It should create a runner for each required sample."""
+    indir, outdir = create_inputs(tmp_path, 10)
+    (outdir.with_suffix(".wip") / "setting~monitored/9/status~success/run~0")\
+        .mkdir(parents=True)
+    (outdir.with_suffix(".wip") / "setting~unmonitored/0/status~success/run~0")\
+        .mkdir(parents=True)
+
+    collector = Collector(
+        touch_target, indir, outdir, n_regions=N_REGIONS, n_instances=2,
+        n_clients_per_region=1, n_monitored=5, n_unmonitored=5, max_failures=1
+    )
+    collector.init_runners()
+
+    for i in [1, 2, 3, 4, 9]:
+        assert collector.is_monitored(str(i))
+    for i in [0, 5, 6, 7, 8]:
+        assert not collector.is_monitored(str(i))
+
+
+# TODO Should be assigned to region which was already collected
+
 
 # TODO: Need to balance the regions
 # TODO: Balance the regions when reassigning failures

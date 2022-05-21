@@ -74,10 +74,70 @@ class Collector:
 
         self.runners: Dict[str, Tuple[TargetRunner, bool]] = {}
 
+    def is_monitored(self, key: str) -> bool:
+        """Return True if the sample identified by the key is assigned
+        to the monitored setting, false otherwise.
+        """
+        return self.runners[key][1]
+
+    def init_runners(self):
+        """Initialises the runners considering assignments in prior runs."""
+        input_files = list(self.input_dir.glob("*.json"))
+        input_files.sort(reverse=True, key=lambda p: int(p.stem))
+        input_map = {path.stem: path for path in input_files}
+
+        counts = {True: 0, False: 0}
+
+        for (is_monitored, setting) in [
+            (True, "monitored"), (False, "unmonitored")
+        ]:
+            for output_dir in self.wip_output_dir.glob(f"setting~{setting}/*"):
+                name = output_dir.stem
+                self.runners[name] = (
+                    self._new_runner(input_map[name], output_dir), is_monitored
+                )
+                counts[is_monitored] += 1
+
+                # Remove it from future consideration
+                del input_map[name]
+
+        input_files = list(input_map.values())
+
+        for (n_required, is_monitored) in [
+            (self.n_monitored, True), (self.n_unmonitored, False)
+        ]:
+            n_required -= counts[is_monitored]
+            self._create_runners(n_required, input_files, is_monitored)
+
+    def _create_runners(self, n_required: int, input_files, is_monitored: bool):
+        setting = "monitored" if is_monitored else "unmonitored"
+        (self.wip_output_dir / f"setting~{setting}").mkdir(exist_ok=True)
+
+        for _ in range(n_required):
+            path = input_files.pop()
+            # Use the sample id as the key for lookups
+            key = path.stem
+
+            output_dir = self.wip_output_dir / f"setting~{setting}" / key
+            output_dir.mkdir(exist_ok=False)
+
+            self.runners[key] = (
+                self._new_runner(path, output_dir), is_monitored
+            )
+        return input_files
+
+    def _new_runner(self, indir, outdir) -> "TargetRunner":
+        return TargetRunner(
+            self.target, indir, outdir, self.region_queues, delay=DEFAULT_DELAY
+        )
+
     async def run(self):
         """Collect the required number of samples."""
         unused_inputs = list(self.input_dir.glob("*.json"))
-        unused_inputs = self.create_runners(unused_inputs)
+        unused_inputs = self.create_runners(
+            unused_inputs, n_monitored=self.n_monitored,
+            n_unmonitored=self.n_unmonitored
+        )
 
         pending_tasks = {
             asyncio.create_task(runner.run(
@@ -98,16 +158,22 @@ class Collector:
                 cancel_tasks(pending_tasks, self.log)
                 raise
 
-            new_tasks = self._handle_done_tasks(done, pending_tasks)
+            new_tasks = self._schedule_new_tasks(
+                done, pending_tasks, unused_inputs
+            )
 
             pending_tasks.update(new_tasks)
 
-    def _handle_done_tasks(self, done, pending_tasks):
+    def _schedule_new_tasks(self, done, pending_tasks, unused_inputs):
         # Identify failed tasks and raise any encountered exceptions
         failed_ids = {t.get_name() for t in done if not t.result()}
         # Anything that is not in failed_ids or pending_ids successfully
         # completed
         pending_ids = {t.get_name() for t in pending_tasks}
+        self.log.info(
+            "%d runs failed, %d are still pending", len(failed_ids),
+            len(pending_ids)
+        )
 
         req_monitored = 0
         req_unmonitored = {i: 0 for i in range(self.n_regions)}
@@ -132,28 +198,107 @@ class Collector:
                 # These monitored completed at least 1 sample and can be reused
                 reusable.add(name)
 
-        new_tasks = []
+        new_tasks = self._add_monitored_runners(
+            req_monitored, failed_ids, pending_ids, unused_inputs
+        )
+        new_tasks.extend(self._add_unmonitored_runners(
+            req_unmonitored, reusable, unused_inputs
+        ))
+
+    def _add_monitored_runners(
+        self, n_required, failed_ids, pending_ids, unused_inputs
+    ):
+        self.log.info("Require %d monitored more", n_required)
+
+        tasks = []
         # Now we need to recreate new tasks
-        # Successful unmonitored can become monitored
-        successful_unmonitored = [
+        # Prior successful unmonitored can become monitored
+        successful_unmon = [
             name for (name, (_, is_monitored)) in self.runners.items()
             if not is_monitored and name not in pending_ids
             and name not in failed_ids
         ]
-        while req
+
+        idx = 0
+        while n_required > 0 and idx < len(successful_unmon):
+            name = successful_unmon[idx]
+            runner, _ = self.runners[name]
+            # Reassign it to be monitored
+            self.runners[name] = (runner, True)
+            self.log.debug("Reassigned %s to be monitored", name)
+
+            new_dir = self.wip_output_dir / "setting~monitored" / name
+            runner.output_dir = runner.output_dir.rename(new_dir)
+
+            # Create a task to collect the samples
+            tasks.append(
+                asyncio.create_task(
+                    runner.run(self.n_instances, self.max_failures)
+                )
+            )
+
+            n_required -= 1
+            idx += 1
+
+        if n_required > 0:
+            tasks.extend(self.create_runners(
+                unused_inputs, n_monitored=n_required, n_unmonitored=0
+            ))
+        return tasks
+
+    def _add_unmonitored_runners(
+        self, required_by_region, reusable, unused_inputs
+    ):
+        tasks = []
 
         # Prior failed monitored can become unmonitored
+        for name in reusable:
+            runner, _ = self.runners[name]
+            assert runner.progress_ is not None
+            assert runner.progress_.completed is not None
+
+            is_used = False
+            for region_id in required_by_region:
+                if (
+                    required_by_region[region_id] > 0
+                    and runner.progress_.completed[region_id] > 0
+                ):
+                    self.runners[name] = (runner, False)
+                    self.log.debug("Reassigned %s to be unmonitored", name)
+                    is_used = True
+
+                    new_dir = self.wip_output_dir / "setting~unmonitored" / name
+                    runner.output_dir = runner.output_dir.rename(new_dir)
+
+                    # TODO Balance region Id
+                    # Create a task for this. It should result in no collection,
+                    # just a confirmation of the files existing
+                    tasks.append(
+                        asyncio.create_task(runner.run(1, self.max_failures))
+                    )
+
+                    required_by_region[region_id] -= 1
+                    # Do not check any other region_id
+                    break
+
+            if not is_used:
+                self.log.warning("Found no use for sample %s", name)
+
+            # TODO: Complete this function
 
 
-    def create_runners(self, all_inputs: List[Path]):
+    def create_runners(
+        self, all_inputs: List[Path], n_monitored: int, n_unmonitored: int
+    ):
         """Initlaise the runners and returns the input list with any
         used inputs removed and sorted in descending order by their
         stem.
         """
         # TODO: Detect previous monitored/unmonitored samples
+        # TODO: Probably in a diff place since this function has its use
         all_inputs.sort(reverse=True, key=lambda p: int(p.stem))
 
-        for i in range(self.n_monitored + self.n_unmonitored):
+        for i in range(n_monitored + n_unmonitored):
             path = all_inputs.pop()
             # Use the sample id as the key for lookups
             key = path.stem
@@ -170,24 +315,6 @@ class Collector:
                 is_monitored
             )
         return all_inputs
-
-        # # Create the initial tasks for monitored and unmonitored samples
-        # for i in range(n_samples):
-        #     in_path = all_inputs.pop()
-        #     # Use the sample id as the key for lookups
-        #     key = in_path.stem
-
-        #     n_instances = self.n_instances if i < self.n_monitored else 1
-        #     output_dir = self.wip_output_dir / in_path.stem
-
-        #     runners[key] = TargetRunner(
-        #         self.target, in_path, output_dir, self.region_queues,
-        #         delay=DEFAULT_DELAY
-        #     )
-        #     tasks[key] = asyncio.create_task(
-        #         runners[key].run(n_instances, self.max_failures), name=key
-        #     )
-        #     is_monitored[key] = (i < self.n_monitored)
 
 
 class TargetRunner:
