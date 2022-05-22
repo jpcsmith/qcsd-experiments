@@ -113,6 +113,7 @@ class Experiment:
             "train_test": rng.integers(MAX_RAND_SEED),
             "kfold_shuffle": rng.integers(MAX_RAND_SEED),
             "tensorflow": rng.integers(MAX_RAND_SEED),
+            "non_tune_validation_seed": rng.integers(MAX_RAND_SEED),
         }
         tensorflow.random.set_seed(self.seeds_["tensorflow"])
 
@@ -158,16 +159,20 @@ class Experiment:
             x_train = first_n_packets(x_train, n_packets=n_packets)
             x_test = first_n_packets(x_test, n_packets=n_packets)
 
+            x_train, x_val, y_train, y_val = train_test_split(
+                x_train, y_train, test_size=self.validation_split,
+                stratify=y_train, shuffle=True,
+                random_state=self.seeds_["non_tune_validation_seed"]
+            )
             classifier = varcnn.VarCNNClassifier(
                 n_classes=n_classes, n_meta_features=N_META_FEATURES,
                 n_packet_features=n_packets,
                 callbacks=varcnn.default_callbacks(lr_decay=lr_decay),
                 epochs=MAX_EPOCHS, tag=f"varcnn-{self.feature_type}",
-                validation_split=self.validation_split,
                 learning_rate=learning_rate,
                 verbose=min(self.verbose, 1),
             )
-            classifier.fit(x_train, y_train)
+            classifier.fit(x_train, y_train, validation_data=(x_val, y_val))
 
         # Predict the classes for the test set
         probabilities = classifier.predict_proba(x_test)
