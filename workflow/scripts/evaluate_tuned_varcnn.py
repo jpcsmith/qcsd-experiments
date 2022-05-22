@@ -151,18 +151,15 @@ class Experiment:
             x_train = first_n_packets(x_train, n_packets=n_packets)
             x_test = first_n_packets(x_test, n_packets=n_packets)
 
-            x_train, x_val, y_train, y_val = train_test_split(
-                x_train, y_train, test_size=self.validation_split,
-                stratify=y_train, shuffle=True,
-                random_state=self.seeds_["train_val"]
-            )
             classifier = varcnn.VarCNNClassifier(
                 n_meta_features=N_META_FEATURES, n_packet_features=n_packets,
                 callbacks=varcnn.default_callbacks(lr_decay=lr_decay),
                 epochs=MAX_EPOCHS, tag=f"varcnn-{self.feature_type}",
                 learning_rate=learning_rate, verbose=min(self.verbose, 1),
             )
-            classifier.fit(x_train, y_train, validation_data=(x_val, y_val))
+            classifier.fit(
+                x_train, y_train, validation_split=self.validation_split
+            )
 
         # Predict the classes for the test set
         probabilities = classifier.predict_proba(x_test)
@@ -174,18 +171,13 @@ class Experiment:
     def tune_hyperparameters(self, x_train, y_train):
         """Perform hyperparameter tuning."""
         assert self.seeds_ is not None, "seeds must be set"
-        x_train, x_val, y_train, y_val = train_test_split(
-            x_train, y_train, test_size=self.validation_split,
-            stratify=y_train, shuffle=True,
-            random_state=self.seeds_["train_val"]
-        )
-
         pipeline = Pipeline([
             ("first_n_packets", FunctionTransformer(first_n_packets)),
             ("varcnn", varcnn.VarCNNClassifier(
                 n_meta_features=N_META_FEATURES,
                 epochs=MAX_EPOCHS, tag=f"varcnn-{self.feature_type}",
-                validation_data=(x_val, y_val), verbose=min(self.verbose, 1),
+                validation_split=self.validation_split,
+                verbose=min(self.verbose, 1),
             ))
         ])
         param_grid = [
