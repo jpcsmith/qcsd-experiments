@@ -211,14 +211,17 @@ def _get_initial_run_id(path: Path) -> int:
 
 async def cancel_tasks(tasks, logger):
     """Cancel and supress the cancelled error for the iterable of tasks."""
-    for task in (t for t in tasks if not t.done()):
-        logger.debug("Cancelling task %s", task.get_name())
-        task.cancel()
-        # Wait for the cancelled error to raise in the task, will
-        # be as soon as it is scheduled so no other exception
-        # should be raised
-        with contextlib.suppress(asyncio.CancelledError):
-            await task
+    for task in tasks:
+        if not task.done():
+            logger.debug("Cancelling task %s", task.get_name())
+            task.cancel()
+            # Wait for the cancelled error to raise in the task, will
+            # be as soon as it is scheduled so no other exception
+            # should be raised
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+        elif not task.cancelled() and task.exception() is not None:
+            logger.debug("Cancelled task with exception: %r", task.exception())
 
 
 class BaseCollector:
@@ -590,7 +593,7 @@ class Collector:
                 success_ids = {t.get_name() for t in done if t.result()}
                 failed_ids = {t.get_name() for t in done if not t.result()}
             except Exception:
-                cancel_tasks(pending_tasks, self.log)
+                await cancel_tasks(pending_tasks, self.log)
                 raise
 
             self.log.info(

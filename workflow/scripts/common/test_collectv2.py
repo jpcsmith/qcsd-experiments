@@ -19,7 +19,8 @@ def touch_target(_: Path, output_dir: Path, *args, **kwargs) -> bool:
     return True
 
 
-def failing_target(infile, output_dir, region_id, client_id):  # pylint: disable=unused-argument
+def failing_target(infile, output_dir, region_id, client_id):
+    # pylint: disable=unused-argument
     """Returns false when client_id equals the region_id."""
     if client_id == region_id:
         (output_dir / "touch").write_text("failed")
@@ -28,7 +29,7 @@ def failing_target(infile, output_dir, region_id, client_id):  # pylint: disable
     return True
 
 
-def randomly_failing_target(chance: float, seed):
+def randomly_failing_target(chance: float, seed, raise_on_err=False):
     """A thread safe target which randomly fail with the specified chance."""
     assert 0 < chance < 1
 
@@ -40,6 +41,8 @@ def randomly_failing_target(chance: float, seed):
         with lock:
             value = rng.random()
 
+        if value <= chance and raise_on_err:
+            raise TargetError()
         if value <= chance:
             (output_dir / "touch").write_text("failed")
             return False
@@ -360,3 +363,21 @@ async def test_runs_to_completion(
     )
 
     await collector.run()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("n_inputs,n_monitored,n_unmonitored", [(20, 4, 6)])
+async def test_runs_to_failure(
+    tmp_path, n_inputs, n_monitored, n_unmonitored
+):
+    """It should successfully run a collection in spite of failures."""
+    indir, outdir = create_inputs(tmp_path, n_inputs)
+    collector = Collector(
+        randomly_failing_target(0.1, seed=32, raise_on_err=True), indir, outdir,
+        n_regions=2, n_instances=20, n_clients_per_region=2,
+        n_monitored=n_monitored, n_unmonitored=n_unmonitored, max_failures=2,
+        delay=0.01
+    )
+
+    with pytest.raises(TargetError):
+        await collector.run()
