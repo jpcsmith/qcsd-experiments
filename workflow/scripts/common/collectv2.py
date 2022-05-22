@@ -1,5 +1,6 @@
 """Orchestrate the collection of web-pages."""
 # pylint: disable=too-many-instance-attributes
+import re
 import time
 import shutil
 import logging
@@ -11,6 +12,7 @@ from itertools import islice
 from typing import (
     Callable, Tuple, List, Dict, Set, Iterator, Optional
 )
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 
@@ -328,6 +330,32 @@ class BaseCollector:
     def __contains__(self, key) -> bool:
         return key in self.runners
 
+    def relocate_files(self, output_dir: Path):
+        """Relocate the run files to the output_dir."""
+        assert len(self.runners) == self.n_web_pages
+        for name, (runner, _) in self.runners.items():
+            web_page_dir = (output_dir / name)
+            web_page_dir.mkdir(exist_ok=False)
+
+            n_files = [
+                _relocate_files(runner.output_dir, web_page_dir, region_id)
+                for region_id in range(self.n_regions)
+            ]
+            assert sum(n_files) >= self.n_instances
+
+
+def _relocate_files(indir: Path, output_dir: Path, region_id: int):
+    pattern = r"run~(?P<run_id>\d+)"
+    files = list(indir.glob(f"region_id~{region_id}/status~success/run~*"))
+    run_ids = [
+        int(re.search(pattern, str(p))["run_id"]) for p in files  # type: ignore
+    ]
+
+    for i, idx in enumerate(np.argsort(run_ids)):
+        files[idx].rename(output_dir / f"{region_id}_{i}")
+
+    return len(files)
+
 
 class MonitoredCollector(BaseCollector):
     """Stores and manages TaskRunners for collecting the monitored portion of
@@ -368,9 +396,6 @@ class MonitoredCollector(BaseCollector):
             runner.progress_.use_all_regions()
 
             self.runners[name] = (runner, None)
-
-    def relocate_files(self):
-        pass
 
 
 class UnmonitoredCollector(BaseCollector):
@@ -478,6 +503,8 @@ class Collector:
         self.target = target
         self.input_dir = Path(input_dir)
         self.output_dir = Path(output_dir)
+        self.n_regions = n_regions
+        self.n_clients_per_region = n_clients_per_region
 
         self.wip_output_dir = self.output_dir.with_suffix(".wip")
         self.wip_output_dir.mkdir(exist_ok=True)
@@ -538,6 +565,12 @@ class Collector:
 
     async def run(self):
         """Collect the required number of samples."""
+        # Configure the threadpool
+        loop = asyncio.get_running_loop()
+        loop.set_default_executor(
+            ThreadPoolExecutor(self.n_regions * self.n_clients_per_region)
+        )
+
         start_time = time.perf_counter()
         unused_inputs = self.init_runners()
 
@@ -587,4 +620,5 @@ class Collector:
         self._relocate_files()
 
     def _relocate_files(self):
-        pass
+        self.monitored.relocate_files(self.output_dir)
+        self.unmonitored.relocate_files(self.output_dir)

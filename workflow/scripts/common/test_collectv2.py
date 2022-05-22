@@ -360,6 +360,3 @@ async def test_runs_to_completion(
     )
 
     await collector.run()
-
-
-# TODO: Need to set the number of threads to use
