@@ -15,7 +15,7 @@ Options:
         Set the verbosity of the gridsearch and classifier. A value of
         0 disables output whereas 3 produces all output [default: 0].
 """
-# pylint: disable=too-many-instance-attributes
+# pylint: disable=too-many-instance-attributes,too-many-locals
 import time
 import logging
 import dataclasses
@@ -24,8 +24,9 @@ from typing import Optional, ClassVar, Sequence, Union
 
 import h5py
 import numpy as np
+from sklearn.experimental import enable_halving_search_cv # noqa
 from sklearn.metrics import make_scorer
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import HalvingGridSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer
 from sklearn.model_selection import StratifiedKFold, train_test_split
@@ -113,7 +114,7 @@ class Experiment:
             "train_test": rng.integers(MAX_RAND_SEED),
             "kfold_shuffle": rng.integers(MAX_RAND_SEED),
             "tensorflow": rng.integers(MAX_RAND_SEED),
-            "non_tune_validation_seed": rng.integers(MAX_RAND_SEED),
+            "train_val": rng.integers(MAX_RAND_SEED),
         }
         tensorflow.random.set_seed(self.seeds_["tensorflow"])
 
@@ -133,17 +134,8 @@ class Experiment:
 
         if self.hyperparams == "tune":
             self.logger.info("Performing hyperparameter tuning ...")
-            # Perform tuning to determine the number of packets to use
-            n_packets = self.tune_n_packets(
-                x_train, y_train, n_classes=n_classes)
-            # Reduce the training and testing features to the found num packets
-            x_train = first_n_packets(x_train, n_packets=n_packets)
-            x_test = first_n_packets(x_test, n_packets=n_packets)
-
             # Tune other hyperparameters and fit the final estimator
-            classifier = self.tune_hyperparameters(
-                x_train, y_train, n_classes=n_classes, n_packets=n_packets
-            )
+            classifier = self.tune_hyperparameters(x_train, y_train)
         else:
             assert isinstance(self.hyperparams, dict)
             n_packets = self.hyperparams.get("n_packets", DEFAULT_N_PACKETS)
@@ -162,15 +154,13 @@ class Experiment:
             x_train, x_val, y_train, y_val = train_test_split(
                 x_train, y_train, test_size=self.validation_split,
                 stratify=y_train, shuffle=True,
-                random_state=self.seeds_["non_tune_validation_seed"]
+                random_state=self.seeds_["train_val"]
             )
             classifier = varcnn.VarCNNClassifier(
-                n_classes=n_classes, n_meta_features=N_META_FEATURES,
-                n_packet_features=n_packets,
+                n_meta_features=N_META_FEATURES, n_packet_features=n_packets,
                 callbacks=varcnn.default_callbacks(lr_decay=lr_decay),
                 epochs=MAX_EPOCHS, tag=f"varcnn-{self.feature_type}",
-                learning_rate=learning_rate,
-                verbose=min(self.verbose, 1),
+                learning_rate=learning_rate, verbose=min(self.verbose, 1),
             )
             classifier.fit(x_train, y_train, validation_data=(x_val, y_val))
 
@@ -181,69 +171,43 @@ class Experiment:
 
         return (probabilities, y_test, classifier.classes_)
 
-    def tune_n_packets(self, x_train, y_train, *, n_classes: int) -> int:
-        """Perform hyperparameter tuning for the number of packets to feed
-        the classifier.
-
-        Return the chosen number of packets.
-        """
+    def tune_hyperparameters(self, x_train, y_train):
+        """Perform hyperparameter tuning."""
         assert self.seeds_ is not None, "seeds must be set"
+        x_train, x_val, y_train, y_val = train_test_split(
+            x_train, y_train, test_size=self.validation_split,
+            stratify=y_train, shuffle=True,
+            random_state=self.seeds_["train_val"]
+        )
+
         pipeline = Pipeline([
             ("first_n_packets", FunctionTransformer(first_n_packets)),
             ("varcnn", varcnn.VarCNNClassifier(
-                n_classes=n_classes, n_meta_features=N_META_FEATURES,
-                callbacks=varcnn.default_callbacks(),
+                n_meta_features=N_META_FEATURES,
                 epochs=MAX_EPOCHS, tag=f"varcnn-{self.feature_type}",
-                validation_split=self.validation_split,
-                verbose=min(self.verbose, 1),
+                validation_data=(x_val, y_val), verbose=min(self.verbose, 1),
             ))
         ])
         param_grid = [
             {
                 "first_n_packets__kw_args": [{"n_packets": n_packets}],
-                "varcnn__n_packet_features": [n_packets]
+                "varcnn__n_packet_features": [n_packets],
+                "varcnn__learning_rate": self.learning_rate_parameters,
+                "varcnn__callbacks": [
+                    varcnn.default_callbacks(lr_decay=lr_decay)
+                    for lr_decay in self.lr_decay_parameters
+                ]
             }
             for n_packets in self.n_packet_parameters
         ]
+
         cross_validation = StratifiedKFold(
             self.n_folds, shuffle=True,
             random_state=self.seeds_["kfold_shuffle"]
         )
 
-        grid_search = GridSearchCV(
+        grid_search = HalvingGridSearchCV(
             pipeline, param_grid, cv=cross_validation, error_score="raise",
-            scoring=make_scorer(rf1_score), verbose=self.verbose, refit=False,
-        )
-        grid_search.fit(x_train, y_train)
-
-        self.logger.info("tune_n_packets results = %s", grid_search.cv_results_)
-        self.logger.info("tune_n_packets best = %s", grid_search.best_params_)
-        return grid_search.best_params_["varcnn__n_packet_features"]
-
-    def tune_hyperparameters(self, x_train, y_train, *, n_classes, n_packets):
-        """Perform hyperparameter tuning on the learning rate."""
-        assert self.seeds_ is not None, "seeds must be set"
-        estimator = varcnn.VarCNNClassifier(
-            n_classes=n_classes, n_meta_features=N_META_FEATURES,
-            n_packet_features=n_packets,
-            epochs=MAX_EPOCHS, tag=f"varcnn-{self.feature_type}",
-            validation_split=self.validation_split,
-            verbose=min(self.verbose, 1),
-        )
-        param_grid = {
-            "learning_rate": self.learning_rate_parameters,
-            "callbacks": [
-                varcnn.default_callbacks(lr_decay=lr_decay)
-                for lr_decay in self.lr_decay_parameters
-            ]
-        }
-        cross_validation = StratifiedKFold(
-            self.n_folds, shuffle=True,
-            random_state=self.seeds_["kfold_shuffle"]
-        )
-
-        grid_search = GridSearchCV(
-            estimator, param_grid, cv=cross_validation, error_score="raise",
             scoring=make_scorer(rf1_score), verbose=self.verbose, refit=True,
         )
         grid_search.fit(x_train, y_train)
@@ -252,7 +216,7 @@ class Experiment:
         self.logger.info("hyperparameter best = %s", grid_search.best_params_)
         self.logger.info(
             "hyperparameter best lr_decay %f",
-            grid_search.best_params_["callbacks"][0].factor
+            grid_search.best_params_["varcnn__callbacks"][0].factor
         )
 
         return grid_search.best_estimator_
