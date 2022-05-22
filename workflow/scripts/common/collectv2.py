@@ -134,7 +134,7 @@ class TargetRunner:
             await asyncio.gather(*region_tasks)
         except TooManyFailuresException:
             await cancel_tasks(region_tasks, self.log)
-            self.log.warning("Collection failed due to too many failures.")
+            self.log.warning("Collection aborted due to too many failures.")
             return False
         except Exception:
             # If one of the region collections fails then cancel all regions.
@@ -491,8 +491,8 @@ class Collector:
     def __init__(
         self,
         target: TargetFn,
-        input_dir: str,
-        output_dir: str,
+        input_dir: Path,
+        output_dir: Path,
         *,
         n_regions: int,
         n_clients_per_region: int,
@@ -592,7 +592,8 @@ class Collector:
                 # Identify failed tasks and raise any encountered exceptions
                 success_ids = {t.get_name() for t in done if t.result()}
                 failed_ids = {t.get_name() for t in done if not t.result()}
-            except Exception:
+            except Exception as err:
+                self.log.critical("Aborting collection due to error: %s", err)
                 await cancel_tasks(pending_tasks, self.log)
                 raise
 
@@ -623,5 +624,6 @@ class Collector:
         self._relocate_files()
 
     def _relocate_files(self):
+        self.output_dir.mkdir(exist_ok=True)
         self.monitored.relocate_files(self.output_dir)
         self.unmonitored.relocate_files(self.output_dir)
