@@ -10,18 +10,37 @@ def ml_eval_brows__plot__inputs(wildcards, flatten: bool = False):
     defence = wildcards["defence"]
     base = "results/ml-eval-brows"
     result = {
-        title: {
-            "QCSD": f"{base}/defence~{defence}/classifier~{classifier}/predictions.csv",
-            "Undef.": f"{base}/defence~undefended/classifier~{classifier}/predictions.csv",
+        "$k$-FP": {
+            "QCSD": f"{base}/defence~{defence}/classifier~kfp/predictions.csv",
+            "Simulated": f"{base}/defence~simulated-{defence}/classifier~kfp/predictions.csv",
+            "Undef.": f"{base}/defence~undefended/classifier~kfp/predictions.csv",
         }
-        for (classifier, title) in [
-            ("kfp", "$k$-FP"), ("varcnn", "Var-CNN"), ("varcnn-time", "Var-CNN(T)"),
-            ("varcnn-sizes", "Var-CNN(S)"),
-        ]
+            # title: {
+            #     "QCSD": f"{base}/defence~{defence}/classifier~{classifier}/predictions.csv",
+            #     "Undef.": f"{base}/defence~undefended/classifier~{classifier}/predictions.csv",
+            # }
+            # for (classifier, title) in [
+            #     ("kfp", "$k$-FP"), ("varcnn", "Var-CNN"), ("varcnn-time", "Var-CNN(T)"),
+            #     ("varcnn-sizes", "Var-CNN(S)"),
+            # ]
     }
     if flatten:
         result = [v for values in result.values() for v in values.values()]
     return result
+
+
+rule ml_eval_brows__simulated_dataset:
+    """Create a simulated dataset based on a collected dataset (pattern rule)."""
+    output:
+        "results/ml-eval-brows/defence~simulated-front/dataset.h5"
+    input:
+        "results/ml-eval-brows/defence~undefended/dataset/"
+    params:
+        **ml_eb_config["dataset"],
+        simulate="front",
+        simulate_kws={**ml_eb_config["front"], "seed": 298}
+    script:
+        "../scripts/create_dataset.py"
 
 
 rule ml_eval_brows__plot:
@@ -34,7 +53,7 @@ rule ml_eval_brows__plot:
         lambda w: ml_eval_brows__plot__inputs(w, flatten=True)
     params:
         layout=ml_eval_brows__plot__inputs,
-        line_styles={"QCSD": "solid", "Undef.": "dashdot"},
+        line_styles={"QCSD": "solid", "Undef.": "dashdot", "Simulated": "dotted"},
         with_legend=True,
     notebook:
         "../notebooks/result-analysis-curve.ipynb"

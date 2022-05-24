@@ -38,7 +38,9 @@ def main(
         del simulate_kws["use_empty_resources"]
 
     sample_dirs = [p for p in Path(input_).iterdir() if p.is_dir()]
-    sample_dirs.sort(key=lambda p: int(p.stem))
+    # Sort such that the dirs with the most samples are first ties broken by
+    # lower sample ids
+    sample_dirs.sort(key=lambda p: (sum(-1 for _ in p.glob("*")), int(p.stem)))
 
     if len(sample_dirs) < n_monitored + n_unmonitored:
         raise ValueError(f"Insufficient samples: {len(sample_dirs)}")

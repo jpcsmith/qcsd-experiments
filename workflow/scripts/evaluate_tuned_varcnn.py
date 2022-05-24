@@ -24,9 +24,8 @@ from typing import Optional, ClassVar, Sequence, Union
 
 import h5py
 import numpy as np
-from sklearn.experimental import enable_halving_search_cv # noqa
 from sklearn.metrics import make_scorer
-from sklearn.model_selection import HalvingGridSearchCV
+from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer
 from sklearn.model_selection import StratifiedKFold, train_test_split
@@ -78,9 +77,9 @@ class Experiment:
     feature_type: str
 
     # The fraction of samples to use for testing the final model
-    test_size: float = 0.1
+    test_size: float = 0.2
 
-    validation_split: float = 0.2
+    validation_split: float = 0.1
 
     # Number of folds used in the stratified k-fold cross validation
     n_folds: int = 3
@@ -96,8 +95,9 @@ class Experiment:
 
     # Hyperparameters to search
     n_packet_parameters: Sequence[int] = (5_000, 7_500, 10_000)
-    learning_rate_parameters: Sequence[float] = (0.1, 0.01, 0.001)
-    lr_decay_parameters: Sequence[float] = (0.45, np.sqrt(0.1), 0.15)
+    learning_rate_parameters: Sequence[float] = (0.001,)
+    lr_decay_parameters: Sequence[float] = (np.sqrt(0.1),)
+    # lr_decay_parameters: Sequence[float] = (0.45, np.sqrt(0.1), 0.15)
 
     # Other seeds which are chosen for different operations
     seeds_: Optional[dict] = None
@@ -198,7 +198,7 @@ class Experiment:
             random_state=self.seeds_["kfold_shuffle"]
         )
 
-        grid_search = HalvingGridSearchCV(
+        grid_search = GridSearchCV(
             pipeline, param_grid, cv=cross_validation, error_score="raise",
             scoring=make_scorer(rf1_score), verbose=self.verbose, refit=True,
         )
@@ -217,10 +217,14 @@ class Experiment:
         """Load the features and classes from the dataset. Slices the
         packet features to the maximum evaluated.
         """
+        self.logger.info("Loading dataset ...")
         with h5py.File(self.dataset_path, mode="r") as h5in:
-            times = np.asarray(h5in["timestamps"])
+            times = np.asarray(
+                [x.astype("float32") for x in h5in["timestamps"]], dtype=object
+            )
             sizes = np.asarray(h5in["sizes"])
             classes = np.asarray(h5in["labels"]["class"][:])
+        self.logger.info("Extracting features ...")
         return self.extract_features(sizes=sizes, timestamps=times), classes
 
     def extract_features(
@@ -245,7 +249,9 @@ class Experiment:
         features = (
             ensure_non_ragged(sizes, dimension=max_packets)
             if self.feature_type == "sizes"
-            else extract_interarrival_times(timestamps, dimension=max_packets)
+            else extract_interarrival_times(
+                timestamps, dimension=max_packets
+            ).astype("float32")
         )
 
         return np.hstack((features, meta_features))

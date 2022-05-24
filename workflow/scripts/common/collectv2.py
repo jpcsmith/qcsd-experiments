@@ -335,8 +335,9 @@ class BaseCollector:
 
     def relocate_files(self, output_dir: Path):
         """Relocate the run files to the output_dir."""
-        assert len(self.runners) == self.n_web_pages
-        for name, (runner, _) in self.runners.items():
+        assert len(self.runners) >= self.n_web_pages, \
+            f"{len(self.runners)} != {self.n_web_pages}"
+        for name, (runner, _) in islice(self.runners.items(), self.n_web_pages):
             web_page_dir = (output_dir / name)
             web_page_dir.mkdir(exist_ok=False)
 

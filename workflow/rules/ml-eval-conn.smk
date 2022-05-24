@@ -1,26 +1,56 @@
 ml_ec_config = config["experiment"]["ml_eval_conn"]
-
-
 rule ml_eval_conn__all:
     """Create all the plots for the single-connection evaluations (static rule)."""
     input:
-        "results/plots/ml-eval-conn-tamaraw.png",
+        # "results/plots/ml-eval-conn-tamaraw.png",
         "results/plots/ml-eval-conn-front.png",
 
 
 def ml_eval_conn__plot__inputs(wildcards, flatten: bool = False):
     defence = wildcards["defence"]
+    hyperparams = ml_ec_config["hyperparams"]
     base = "results/ml-eval-conn"
+
     result = {
-        title: {
-            "QCSD": f"{base}/defence~{defence}/classifier~{classifier}/predictions.csv",
-            "Simulated": f"{base}/defence~simulated-{defence}/classifier~{classifier}/predictions.csv",
-            "Undef.": f"{base}/defence~undefended/classifier~{classifier}/predictions.csv",
+        "$k$-FP": {
+            "QCSD": f"{base}/defence~{defence}/classifier~kfp/predictions.csv",
+            "Simulated": f"{base}/defence~simulated-{defence}/classifier~kfp/predictions.csv",
+            "Undef.": f"{base}/defence~undefended/classifier~kfp/predictions.csv",
+        },
+        "DF": {
+        },
+        "Var-CNN(S)": {
+            "QCSD": (
+                f"{base}/defence~{defence}/classifier~varcnn-sizes/"
+                f"hyperparams~{hyperparams[defence]['varcnn-sizes']}/predictions.csv"
+            ),
+            "Simulated": (
+                f"{base}/defence~simulated-{defence}/classifier~varcnn-sizes/"
+                f"hyperparams~{hyperparams[defence]['varcnn-sizes']}/predictions.csv"
+            ),
+            "Undef.": (
+                f"{base}/defence~undefended/classifier~varcnn-sizes/"
+                f"hyperparams~{hyperparams['undefended']['varcnn-sizes']}/predictions.csv"
+            )
+        },
+        "Var-CNN(T)": {
+            "QCSD": (
+                f"{base}/defence~{defence}/classifier~varcnn-time/"
+                f"hyperparams~{hyperparams[defence]['varcnn-time']}/predictions.csv"
+            ),
+            "Simulated": (
+                f"{base}/defence~simulated-{defence}/classifier~varcnn-time/"
+                f"hyperparams~{hyperparams[defence]['varcnn-time']}/predictions.csv"
+            ),
+            "Undef.": (
+                f"{base}/defence~undefended/classifier~varcnn-time/hyperparams~{hyperparams['undefended']['varcnn-time']}/predictions.csv"
+            )
+        },
+        "Var-CNN": {
+            "QCSD": f"{base}/defence~{defence}/classifier~varcnn/predictions.csv",
+            "Simulated": f"{base}/defence~simulated-{defence}/classifier~varcnn/predictions.csv",
+            "Undef.": f"{base}/defence~undefended/classifier~varcnn/predictions.csv"
         }
-        for (classifier, title) in [
-            ("kfp", "$k$-FP"), ("varcnn", "Var-CNN"), ("varcnn-time", "Var-CNN(T)"),
-            ("varcnn-sizes", "Var-CNN(S)"),
-        ]
     }
     if flatten:
         result = [v for values in result.values() for v in values.values()]
@@ -41,6 +71,33 @@ rule ml_eval_conn__plot:
         with_legend=lambda w: w["defence"] == "front"
     notebook:
         "../notebooks/result-analysis-curve.ipynb"
+
+
+def ml_eval_conn__combine_varcnn__inputs(wildcards):
+    base = "results/ml-eval-conn/" + wildcards["path"]
+    if "undefended" in wildcards["path"]:
+        hparams = ml_ec_config["hyperparams"]["undefended"]
+    elif "front" in wildcards["path"]:
+        hparams = ml_ec_config["hyperparams"]["front"]
+    elif "tamaraw" in wildcards["path"]:
+        hparams = ml_ec_config["hyperparams"]["tamaraw"]
+    else:
+        raise ValueError(f"Unsupported defence: {wildcards['path']}")
+
+    return {
+        feature_type: f"{base}/classifier~{tag}/hyperparams~{hparams[tag]}/predictions.csv"
+        for feature_type, tag in [("times", "varcnn-time"), ("sizes", "varcnn-sizes")]
+    }
+
+
+rule ml_eval_conn__combine_varcnn:
+    output:
+        "results/ml-eval-conn/{path}/classifier~varcnn/predictions.csv"
+    input:
+        unpack(ml_eval_conn__combine_varcnn__inputs)
+    run:
+        combine_varcnn_predictions(input, output)
+
 
 
 rule ml_eval_conn__simulated_dataset:

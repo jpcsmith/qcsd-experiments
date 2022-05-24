@@ -75,6 +75,17 @@ experiment:
       packet_size: 1200
       msd_limit_excess: 1500
 
+    hyperparams:
+      front:
+        varcnn-time: "tune"
+        varcnn-sizes: "tune"
+      tamaraw:
+        varcnn-time: "learning_rate=0.001,lr_decay=0.45,n_packets=7500"
+        varcnn-sizes: "learning_rate=0.01,lr_decay=0.45,n_packets=10000"
+      undefended:
+        varcnn-time: "n_packets=5000"
+        varcnn-sizes: "n_packets=5000"
+
   ml_eval_mconn:
     dataset:
       n_monitored: 100
@@ -110,13 +121,8 @@ experiment:
     dataset:
       n_monitored: 100
       n_instances: 100
-      n_unmonitored: 1000
+      n_unmonitored: 8000
     tamaraw:
       <<: *tamaraw-default
-      packet_size: 1200
-      msd_limit_excess: 500
-      add_noise: true
-      noise_chance: 0.4
-      noise_bound_lower: -900
-      noise_bound_upper: 0
+      packet_size: 1250
       max_udp_payload_size: 1272

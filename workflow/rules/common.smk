@@ -1,3 +1,6 @@
+import pandas as pd
+
+
 def get_threads_for_classifier(wildcards) -> int:
     """Returns the number of threads to use for the classifier specified
     in the wildcards as `classifier`.
@@ -57,21 +60,13 @@ def build_neqo_args(exp_config):
     return _builder
 
 
-localrules: combine_varcnn_predictions
-rule combine_varcnn_predictions:
-    """Combines VarCNN time and sizes predictions."""
-    output:
-        "{path}/classifier~varcnn/predictions.csv"
-    input:
-        sizes="{path}/classifier~varcnn-sizes/predictions.csv",
-        times="{path}/classifier~varcnn-time/predictions.csv",
-    run:
-        import pandas as pd
-        sizes = pd.read_csv(input["sizes"]).set_index("y_true", append=True)
-        times = pd.read_csv(input["times"]).set_index("y_true", append=True)
-        combined = (sizes + times) / 2
-        combined = combined.reset_index(level="y_true", drop=False)
-        combined.to_csv(output[0], header=True, index=False)
+def combine_varcnn_predictions(input, output):
+    """Combine two varcnn prediction files and write to the first output."""
+    sizes = pd.read_csv(input["sizes"]).set_index("y_true", append=True)
+    times = pd.read_csv(input["times"]).set_index("y_true", append=True)
+    combined = (sizes + times) / 2
+    combined = combined.reset_index(level="y_true", drop=False)
+    combined.to_csv(output[0], header=True, index=False)
 
 
 rule predict__kfp:
@@ -93,31 +88,20 @@ rule predict__kfp:
         " {input} > {output[0]} 2> {log[0]}"
 
 
-# rule predict__varcnn__undefended:
-#     """Perform predictions for either the soze or time component of the Var-CNN
-#     classifier using the hyperparameters from the paper."""
-#     output:
-#         "{path}/defence~undefended/classifier~varcnn-{feature_type}/predictions.csv"
-#     input:
-#         "{path}/defence~undefended/dataset.h5"
-#     log:
-#         "{path}/defence~undefended/classifier~varcnn-{feature_type}/predictions.log"
-
-
 rule predict__varcnn:
     """Perform hyperparameter validation and predictions for either the sizes or time
     component of the Var-CNN classifier (pattern rule)."""
     output:
-        "{path}/classifier~varcnn-{feature_type}/predictions.csv"
+        "{path}/classifier~varcnn-{feature_type}/hyperparams~{hyperparams}/predictions.csv"
     input:
         "{path}/dataset.h5"
     log:
-        "{path}/classifier~varcnn-{feature_type}/predictions.log"
+        "{path}/classifier~varcnn-{feature_type}/hyperparams~{hyperparams}/predictions.log"
     threads:
         workflow.cores
     shell:
-        "workflow/scripts/evaluate_tuned_varcnn.py {wildcards.feature_type} {input}"
-        " > {output} 2> {log}"
+        "workflow/scripts/evaluate_tuned_varcnn.py --hyperparams {wildcards.hyperparams}"
+        " {wildcards.feature_type} {input} > {output} 2> {log}"
 
 
 rule predict__dfnet:

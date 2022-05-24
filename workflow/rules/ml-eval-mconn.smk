@@ -12,15 +12,24 @@ def ml_eval_mconn__plot__inputs(wildcards, flatten: bool = False):
     defence = wildcards["defence"]
     base = "results/ml-eval-mconn"
     result = {
-        title: {
-            "QCSD": f"{base}/defence~{defence}/classifier~{classifier}/predictions.csv",
-            "Undef.": f"{base}/defence~undefended/classifier~{classifier}/predictions.csv",
-        }
-        for (classifier, title) in [
-            ("kfp", "$k$-FP"), ("varcnn", "Var-CNN"), ("varcnn-time", "Var-CNN(T)"),
-            ("varcnn-sizes", "Var-CNN(S)"),
-        ]
+        "$k$-FP": {
+            "QCSD": f"{base}/defence~{defence}/classifier~kfp/predictions.csv",
+            "Undef.": f"{base}/defence~undefended/classifier~kfp/predictions.csv",
+        },
+        # "Var-CNN": {
+        #     "QCSD": f"{base}/defence~{defence}/classifier~varcnn/predictions.csv",
+        #     "Undef.": f"{base}/defence~undefended/classifier~varcnn/predictions.csv",
+        # },
+        "Var-CNN(S)": {
+            "QCSD": f"{base}/defence~{defence}/classifier~varcnn-sizes/hyperparams~tune/predictions.csv",
+            "Undef.": f"{base}/defence~undefended/classifier~varcnn-sizes/hyperparams~n_packets=5000/predictions.csv",
+        },
+        "Var-CNN(T)": {
+            "QCSD": f"{base}/defence~{defence}/classifier~varcnn-time/hyperparams~tune/predictions.csv",
+            "Undef.": f"{base}/defence~undefended/classifier~varcnn-time/hyperparams~n_packets=5000/predictions.csv",
+        },
     }
+
     if flatten:
         result = [v for values in result.values() for v in values.values()]
     return result
@@ -40,6 +49,16 @@ rule ml_eval_mconn__plot:
         with_legend=lambda w: w["defence"] == "front",
     notebook:
         "../notebooks/result-analysis-curve.ipynb"
+
+
+rule ml_eval_mconn__combine_varcnn:
+    output:
+        "results/ml-eval-mconn/{path}/classifier~varcnn/predictions.csv"
+    input:
+        sizes="results/ml-eval-mconn/{path}/classifier~varcnn-sizes/hyperparams~tune/predictions.csv",
+        time="results/ml-eval-mconn/{path}/classifier~varcnn-time/hyperparams~tune/predictions.csv"
+    run:
+        combine_varcnn_predictions(input, output)
 
 
 rule ml_eval_mconn__collect__to_binary:

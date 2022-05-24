@@ -69,7 +69,7 @@ class Experiment:
     feature_importance: Optional[Path]
 
     # The fraction of samples to use for testing the final model
-    test_size: float = 0.1
+    test_size: float = 0.2
 
     # Number of folds used in the stratified k-fold cross validation
     n_folds: int = 3
