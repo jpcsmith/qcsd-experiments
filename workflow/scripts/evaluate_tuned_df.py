@@ -7,6 +7,10 @@ probability predictions are written in CSV format to OUTFILE (defaults
 to stdout).
 
 Options:
+    --hyperparams <val>
+        Either the string 'tune' to perform hyperparameter tuning or a
+        string of the format 'key1=value1,key2=value2' describing the
+        hyperparameters to use [default: tune].
     --verbose <val>
         Set the verbosity of the gridsearch and classifier. A value of
         0 disables output whereas 3 produces all output [default: 0].
@@ -16,7 +20,7 @@ import time
 import logging
 import dataclasses
 from pathlib import Path
-from typing import Optional, ClassVar, Sequence
+from typing import Optional, ClassVar, Sequence, Union
 
 import h5py
 import numpy as np
@@ -31,10 +35,15 @@ from lab.metrics import rprecision_score, recall_score
 import tensorflow
 
 from common import doceasy
-from common.doceasy import Use
+from common.doceasy import Use, Or, And
 
 PAPER_EPOCHS: int = 30
 MAX_RAND_SEED: int = 10_000
+
+# Hyperparameters from the paper
+DEFAULT_N_PACKETS: int = 5000
+DEFAULT_LEARNING_RATE: float = 0.002
+DEFAULT_EPOCHS: int = 30
 
 
 def main(outfile, **kwargs):
@@ -72,11 +81,14 @@ class Experiment:
     # Random seed for the experiment
     seed: int = 114155
 
+    # Hyperparams to use if not "tune"
+    hyperparams: Union[str, dict] = "tune"
+
     # Hyperparameters to search
     n_packet_parameters: Sequence[int] = (5_000, 7_500, 10_000)
     tuned_parameters: dict = dataclasses.field(default_factory=lambda: {
-        "epochs": [15, 30, 45],
-        "learning_rate": [0.1, 0.01, 0.002],
+        "epochs": [30],
+        "learning_rate": [0.002],
     })
 
     # Other seeds which are chosen for different operations
@@ -112,16 +124,43 @@ class Experiment:
             random_state=self.seeds_["train_test"]
         )
 
-        # Perform tuning to determine the number of packets to use
-        n_packets = self.tune_n_packets(x_train, y_train, n_classes=n_classes)
-        # Reduce the training and testing features to the found num of packets
-        x_train = first_n_packets(x_train, n_packets=n_packets)
-        x_test = first_n_packets(x_test, n_packets=n_packets)
+        if self.hyperparams == "tune":
+            self.logger.info("Performing hyperparameter tuning ...")
+            # Tune other hyperparameters and fit the final estimator
+            classifier = self.tune_hyperparameters(
+                x_train, y_train, n_classes=n_classes
+            )
+        else:
+            assert isinstance(self.hyperparams, dict)
+            n_packets = self.hyperparams.get("n_packets", DEFAULT_N_PACKETS)
+            learning_rate = self.hyperparams.get(
+                "learning_rate", DEFAULT_LEARNING_RATE
+            )
+            epochs = self.hyperparams.get("epochs", DEFAULT_EPOCHS)
+            self.logger.info(
+                "Using n_packets=%s, learning_rate=%.3g, and epochs=%d",
+                n_packets, learning_rate, epochs
+            )
 
-        # Tune other hyperparameters and fit the final estimator
-        classifier = self.tune_hyperparameters(
-            x_train, y_train, n_classes=n_classes, n_packets=n_packets
-        )
+            x_train = first_n_packets(x_train, n_packets=n_packets)
+            x_test = first_n_packets(x_test, n_packets=n_packets)
+
+            classifier = dfnet.DeepFingerprintingClassifier(
+                n_classes=n_classes, verbose=min(self.verbose, 1),
+                epochs=epochs, learning_rate=learning_rate
+            )
+            classifier.fit(x_train, y_train)
+
+        # # Perform tuning to determine the number of packets to use
+        # n_packets = self.tune_n_packets(x_train, y_train, n_classes=n_classes)
+        # # Reduce the training and testing features to the found num of packets
+        # x_train = first_n_packets(x_train, n_packets=n_packets)
+        # x_test = first_n_packets(x_test, n_packets=n_packets)
+
+        # # Tune other hyperparameters and fit the final estimator
+        # classifier = self.tune_hyperparameters(
+        #     x_train, y_train, n_classes=n_classes, n_packets=n_packets
+        # )
 
         # Predict the classes for the test set
         probabilities = classifier.predict_proba(x_test)
@@ -130,24 +169,59 @@ class Experiment:
 
         return (probabilities, y_test, classifier.classes_)
 
-    def tune_n_packets(self, x_train, y_train, *, n_classes: int) -> int:
-        """Perform hyperparameter tuning for the number of packets to feed
-        the classifier.
+    # def tune_n_packets(self, x_train, y_train, *, n_classes: int) -> int:
+    #     """Perform hyperparameter tuning for the number of packets to feed
+    #     the classifier.
 
-        Return the chosen number of packets.
-        """
+    #     Return the chosen number of packets.
+    #     """
+    #     assert self.seeds_ is not None, "seeds must be set"
+    #     pipeline = Pipeline([
+    #         ("first_n_packets", FunctionTransformer(first_n_packets)),
+    #         ("dfnet", dfnet.DeepFingerprintingClassifier(
+    #             n_classes=n_classes, verbose=min(self.verbose, 1),
+    #             epochs=PAPER_EPOCHS,
+    #         ))
+    #     ])
+    #     param_grid = [
+    #         {
+    #             "first_n_packets__kw_args": [{"n_packets": n_packets}],
+    #             "dfnet__n_features": [n_packets]
+    #         }
+    #         for n_packets in self.n_packet_parameters
+    #     ]
+    #     cross_validation = StratifiedKFold(
+    #         self.n_folds, shuffle=True,
+    #         random_state=self.seeds_["kfold_shuffle"]
+    #     )
+
+    #     grid_search = GridSearchCV(
+    #         pipeline, param_grid, cv=cross_validation, error_score="raise",
+    #         scoring=make_scorer(rf1_score), verbose=self.verbose, refit=False,
+    #     )
+    #     grid_search.fit(x_train, y_train)
+
+    #     self.logger.info("tune_n_packets results = %s", grid_search.cv_results_)
+    #     self.logger.info("tune_n_packets best = %s", grid_search.best_params_)
+    #     return grid_search.best_params_["dfnet__n_features"]
+
+    def tune_hyperparameters(self, x_train, y_train, *, n_classes):
+        """Perform hyperparameter tuning on the learning rate."""
         assert self.seeds_ is not None, "seeds must be set"
         pipeline = Pipeline([
             ("first_n_packets", FunctionTransformer(first_n_packets)),
             ("dfnet", dfnet.DeepFingerprintingClassifier(
                 n_classes=n_classes, verbose=min(self.verbose, 1),
-                epochs=PAPER_EPOCHS,
             ))
         ])
         param_grid = [
             {
                 "first_n_packets__kw_args": [{"n_packets": n_packets}],
-                "dfnet__n_features": [n_packets]
+                "dfnet__n_features": [n_packets],
+                **{
+                    f"dfnet__{key}": values
+                    for key, values in self.tuned_parameters.items()
+                }
             }
             for n_packets in self.n_packet_parameters
         ]
@@ -158,30 +232,7 @@ class Experiment:
 
         grid_search = GridSearchCV(
             pipeline, param_grid, cv=cross_validation, error_score="raise",
-            scoring=make_scorer(rf1_score), verbose=self.verbose, refit=False,
-        )
-        grid_search.fit(x_train, y_train)
-
-        self.logger.info("tune_n_packets results = %s", grid_search.cv_results_)
-        self.logger.info("tune_n_packets best = %s", grid_search.best_params_)
-        return grid_search.best_params_["dfnet__n_features"]
-
-    def tune_hyperparameters(self, x_train, y_train, *, n_classes, n_packets):
-        """Perform hyperparameter tuning on the learning rate."""
-        assert self.seeds_ is not None, "seeds must be set"
-        estimator = dfnet.DeepFingerprintingClassifier(
-            n_classes=n_classes, n_features=n_packets,
-            verbose=min(self.verbose, 1),
-        )
-        cross_validation = StratifiedKFold(
-            self.n_folds, shuffle=True,
-            random_state=self.seeds_["kfold_shuffle"]
-        )
-
-        grid_search = GridSearchCV(
-            estimator, self.tuned_parameters, cv=cross_validation,
-            error_score="raise", scoring=make_scorer(rf1_score),
-            verbose=self.verbose, refit=True,
+            scoring=make_scorer(rf1_score), verbose=self.verbose, refit=True,
         )
         grid_search.fit(x_train, y_train)
 
@@ -225,4 +276,9 @@ if __name__ == "__main__":
         "OUTFILE": doceasy.CsvFile(mode="w", default="-"),
         "DATASET_PATH": Use(Path),
         "--verbose": Use(int),
+        "--hyperparams": Or("tune", And(doceasy.Mapping(), {
+            doceasy.Optional("n_packets"): Use(int),
+            doceasy.Optional("epochs"): Use(int),
+            doceasy.Optional("learning_rate"): Use(float),
+        }))
     }))
