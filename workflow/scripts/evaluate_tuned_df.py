@@ -57,6 +57,10 @@ def main(outfile, **kwargs):
 
     (probabilities, y_true, classes) = Experiment(**kwargs).run()
 
+    y_pred = classes[np.argmax(probabilities, axis=1)]
+    score = rf1_score(y_true, y_pred)
+    logging.info("r_20 f1-score = %.4g", score)
+
     outfile.writerow(["y_true"] + list(classes))
     outfile.writerows(
         np.hstack((np.reshape(y_true, (-1, 1)), probabilities)))
@@ -147,20 +151,9 @@ class Experiment:
 
             classifier = dfnet.DeepFingerprintingClassifier(
                 n_classes=n_classes, verbose=min(self.verbose, 1),
-                epochs=epochs, learning_rate=learning_rate
+                n_features=n_packets, epochs=epochs, learning_rate=learning_rate
             )
             classifier.fit(x_train, y_train)
-
-        # # Perform tuning to determine the number of packets to use
-        # n_packets = self.tune_n_packets(x_train, y_train, n_classes=n_classes)
-        # # Reduce the training and testing features to the found num of packets
-        # x_train = first_n_packets(x_train, n_packets=n_packets)
-        # x_test = first_n_packets(x_test, n_packets=n_packets)
-
-        # # Tune other hyperparameters and fit the final estimator
-        # classifier = self.tune_hyperparameters(
-        #     x_train, y_train, n_classes=n_classes, n_packets=n_packets
-        # )
 
         # Predict the classes for the test set
         probabilities = classifier.predict_proba(x_test)
@@ -168,42 +161,6 @@ class Experiment:
             "Experiment complete in %.2fs.", (time.perf_counter() - start))
 
         return (probabilities, y_test, classifier.classes_)
-
-    # def tune_n_packets(self, x_train, y_train, *, n_classes: int) -> int:
-    #     """Perform hyperparameter tuning for the number of packets to feed
-    #     the classifier.
-
-    #     Return the chosen number of packets.
-    #     """
-    #     assert self.seeds_ is not None, "seeds must be set"
-    #     pipeline = Pipeline([
-    #         ("first_n_packets", FunctionTransformer(first_n_packets)),
-    #         ("dfnet", dfnet.DeepFingerprintingClassifier(
-    #             n_classes=n_classes, verbose=min(self.verbose, 1),
-    #             epochs=PAPER_EPOCHS,
-    #         ))
-    #     ])
-    #     param_grid = [
-    #         {
-    #             "first_n_packets__kw_args": [{"n_packets": n_packets}],
-    #             "dfnet__n_features": [n_packets]
-    #         }
-    #         for n_packets in self.n_packet_parameters
-    #     ]
-    #     cross_validation = StratifiedKFold(
-    #         self.n_folds, shuffle=True,
-    #         random_state=self.seeds_["kfold_shuffle"]
-    #     )
-
-    #     grid_search = GridSearchCV(
-    #         pipeline, param_grid, cv=cross_validation, error_score="raise",
-    #         scoring=make_scorer(rf1_score), verbose=self.verbose, refit=False,
-    #     )
-    #     grid_search.fit(x_train, y_train)
-
-    #     self.logger.info("tune_n_packets results = %s", grid_search.cv_results_)
-    #     self.logger.info("tune_n_packets best = %s", grid_search.best_params_)
-    #     return grid_search.best_params_["dfnet__n_features"]
 
     def tune_hyperparameters(self, x_train, y_train, *, n_classes):
         """Perform hyperparameter tuning on the learning rate."""

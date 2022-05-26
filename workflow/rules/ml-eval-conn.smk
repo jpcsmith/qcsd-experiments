@@ -17,40 +17,16 @@ def ml_eval_conn__plot__inputs(wildcards, flatten: bool = False):
             "Simulated": f"{base}/defence~simulated-{defence}/classifier~kfp/predictions.csv",
             "Undef.": f"{base}/defence~undefended/classifier~kfp/predictions.csv",
         },
-        "DF": {
-        },
-        "Var-CNN(S)": {
-            "QCSD": (
-                f"{base}/defence~{defence}/classifier~varcnn-sizes/"
-                f"hyperparams~{hyperparams[defence]['varcnn-sizes']}/predictions.csv"
-            ),
-            "Simulated": (
-                f"{base}/defence~simulated-{defence}/classifier~varcnn-sizes/"
-                f"hyperparams~{hyperparams[defence]['varcnn-sizes']}/predictions.csv"
-            ),
-            "Undef.": (
-                f"{base}/defence~undefended/classifier~varcnn-sizes/"
-                f"hyperparams~{hyperparams['undefended']['varcnn-sizes']}/predictions.csv"
-            )
-        },
-        "Var-CNN(T)": {
-            "QCSD": (
-                f"{base}/defence~{defence}/classifier~varcnn-time/"
-                f"hyperparams~{hyperparams[defence]['varcnn-time']}/predictions.csv"
-            ),
-            "Simulated": (
-                f"{base}/defence~simulated-{defence}/classifier~varcnn-time/"
-                f"hyperparams~{hyperparams[defence]['varcnn-time']}/predictions.csv"
-            ),
-            "Undef.": (
-                f"{base}/defence~undefended/classifier~varcnn-time/hyperparams~{hyperparams['undefended']['varcnn-time']}/predictions.csv"
-            )
-        },
-        "Var-CNN": {
-            "QCSD": f"{base}/defence~{defence}/classifier~varcnn/predictions.csv",
-            "Simulated": f"{base}/defence~simulated-{defence}/classifier~varcnn/predictions.csv",
-            "Undef.": f"{base}/defence~undefended/classifier~varcnn/predictions.csv"
-        }
+        # "DF": {
+        #     "QCSD": f"{base}/defence~{defence}/classifier~dfnet/hyperparams~{hyperparams[defence]['dfnet']}/predictions.csv",
+        #     "Simulated": f"{base}/defence~simulated-{defence}/classifier~dfnet/hyperparams~{hyperparams[defence]['dfnet']}/predictions.csv",
+        #     "Undef.": f"{base}/defence~undefended/classifier~dfnet/hyperparams~{hyperparams['undefended']['dfnet']}/predictions.csv",
+        # },
+        # "Var-CNN": {
+        #     "QCSD": f"{base}/defence~{defence}/classifier~varcnn/predictions.csv",
+        #     "Simulated": f"{base}/defence~simulated-{defence}/classifier~varcnn/predictions.csv",
+        #     "Undef.": f"{base}/defence~undefended/classifier~varcnn/predictions.csv"
+        # }
     }
     if flatten:
         result = [v for values in result.values() for v in values.values()]

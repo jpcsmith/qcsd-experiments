@@ -110,6 +110,13 @@ def _maybe_simulate(path: Path, simulate: str, simulate_kws, rng):
         if simulate == "tamaraw":
             return trace.from_csv(path / "schedule.csv")
         if simulate == "front":
+            simulate_kws = {
+                key: value for (key, value) in simulate_kws.items()
+                if key in [
+                    "max_client_packets", "max_server_packets", "packet_size",
+                    "peak_minimum", "peak_maximum", "random_state"
+                ]
+            }
             assert rng is not None
             assert "seed" not in simulate_kws
             assert all(kw in simulate_kws for kw in [

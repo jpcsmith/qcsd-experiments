@@ -50,6 +50,10 @@ def main(outfile, **kwargs):
 
     (probabilities, y_true, classes) = Experiment(**kwargs).run()
 
+    y_pred = classes[np.argmax(probabilities, axis=1)]
+    score = rf1_score(y_true, y_pred)
+    logging.info("r_20 f1-score = %.4g", score)
+
     outfile.writerow(["y_true"] + list(classes))
     outfile.writerows(
         np.hstack((np.reshape(y_true, (-1, 1)), probabilities)))

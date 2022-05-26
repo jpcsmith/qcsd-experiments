@@ -1,5 +1,7 @@
 # ml_host ansible_host=euler.ethz.ch exp_path=/cluster/scratch/jsmith/qcd-experiments
-ml_host ansible_host=home-wan exp_path=/home/jsmith/qcd-final
+[ml_hosts]
+home-wan ansible_host=home-wan exp_path=/home/jsmith/qcd-final
+aws      exp_path=/home/ubuntu/qcd-final
 
 [wg_gateways]
 frankfurt   region_id=0 ansible_host=207.154.212.254

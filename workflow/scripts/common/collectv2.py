@@ -608,8 +608,13 @@ class Collector:
             self.monitored.consume(self.unmonitored.sacrifice_completed())
             self.unmonitored.consume(self.monitored.sacrifice_failed())
 
-            self.monitored.add_runners(unused_inputs)
-            self.unmonitored.add_runners(unused_inputs)
+            try:
+                self.monitored.add_runners(unused_inputs)
+                self.unmonitored.add_runners(unused_inputs)
+            except Exception as err:
+                self.log.critical("Aborting collection due to error: %s", err)
+                await cancel_tasks(pending_tasks, self.log)
+                raise
 
             pending_tasks.update(self.monitored.create_tasks())
             pending_tasks.update(self.unmonitored.create_tasks())

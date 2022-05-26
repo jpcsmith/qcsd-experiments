@@ -10,23 +10,51 @@ def ml_eval_brows__plot__inputs(wildcards, flatten: bool = False):
     defence = wildcards["defence"]
     base = "results/ml-eval-brows"
     result = {
-        "$k$-FP": {
-            "QCSD": f"{base}/defence~{defence}/classifier~kfp/predictions.csv",
-            "Simulated": f"{base}/defence~simulated-{defence}/classifier~kfp/predictions.csv",
-            "Undef.": f"{base}/defence~undefended/classifier~kfp/predictions.csv",
-        }
-            # title: {
-            #     "QCSD": f"{base}/defence~{defence}/classifier~{classifier}/predictions.csv",
-            #     "Undef.": f"{base}/defence~undefended/classifier~{classifier}/predictions.csv",
-            # }
-            # for (classifier, title) in [
-            #     ("kfp", "$k$-FP"), ("varcnn", "Var-CNN"), ("varcnn-time", "Var-CNN(T)"),
-            #     ("varcnn-sizes", "Var-CNN(S)"),
-            # ]
+            # "$k$-FP": {
+            #     "QCSD": f"{base}/defence~{defence}/classifier~kfp/predictions.csv",
+            #     "Simulated": f"{base}/defence~simulated-{defence}/classifier~kfp/predictions.csv",
+            #     "Undef.": f"{base}/defence~undefended/classifier~kfp/predictions.csv",
+            # },
+        "DF": {
+            "QCSD": f"{base}/defence~{defence}/classifier~dfnet/hyperparams~tune/predictions.csv",
+            "Simulated": f"{base}/defence~simulated-{defence}/classifier~dfnet/hyperparams~tune/predictions.csv",
+            "Undef.": f"{base}/defence~undefended/classifier~dfnet/hyperparams~n_packets=5000/predictions.csv",
+        },
+        "Var-CNN": {
+            "QCSD": f"{base}/defence~{defence}/classifier~varcnn/predictions.csv",
+            "Simulated": f"{base}/defence~simulated-{defence}/classifier~varcnn/predictions.csv",
+            "Undef.": f"{base}/defence~undefended/classifier~varcnn/predictions.csv"
+        },
     }
     if flatten:
         result = [v for values in result.values() for v in values.values()]
     return result
+
+
+def ml_eval_brows__combine_varcnn__inputs(wildcards):
+    base = "results/ml-eval-brows/" + wildcards["path"]
+    if "undefended" in wildcards["path"]:
+        hparams = ml_ec_config["hyperparams"]["undefended"]
+    elif "front" in wildcards["path"]:
+        hparams = ml_ec_config["hyperparams"]["front"]
+    elif "tamaraw" in wildcards["path"]:
+        hparams = ml_ec_config["hyperparams"]["tamaraw"]
+    else:
+        raise ValueError(f"Unsupported defence: {wildcards['path']}")
+
+    return {
+        feature_type: f"{base}/classifier~{tag}/hyperparams~{hparams[tag]}/predictions.csv"
+        for feature_type, tag in [("times", "varcnn-time"), ("sizes", "varcnn-sizes")]
+    }
+
+
+rule ml_eval_brows__combine_varcnn:
+    output:
+        "results/ml-eval-brows/{path}/classifier~varcnn/predictions.csv"
+    input:
+        unpack(ml_eval_brows__combine_varcnn__inputs)
+    run:
+        combine_varcnn_predictions(input, output)
 
 
 rule ml_eval_brows__simulated_dataset:

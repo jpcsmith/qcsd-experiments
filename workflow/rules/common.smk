@@ -27,8 +27,12 @@ def build_neqo_args(exp_config):
                 "--front-peak-max", args["peak_maximum"],
                 "--front-peak-min", args["peak_minimum"],
             ]
+            if "msd_limit_excess" in args:
+                result += ["--msd-limit-excess", args["msd_limit_excess"]]
             if "use_empty_resources" in args:
                 result += ["--use-empty-resources", str(args["use_empty_resources"]).lower()]
+            if "max_udp_payload_size" in args:
+                result += ["--max-udp-payload-size", args["max_udp_payload_size"]]
             return result
         if wildcards["defence"] == "tamaraw":
             args = exp_config["tamaraw"]
@@ -108,15 +112,16 @@ rule predict__dfnet:
     """Perform hyperparameter validation and predictions for the Deep Fingerprinting
     classifier (pattern rule)."""
     output:
-        "{path}/classifier~dfnet/predictions.csv"
+        "{path}/classifier~dfnet/hyperparams~{hyperparams}/predictions.csv"
     input:
         "{path}/dataset.h5"
     log:
-        "{path}/classifier~dfnet/predictions.log"
+        "{path}/classifier~dfnet/hyperparams~{hyperparams}/predictions.log"
     threads:
         workflow.cores
     shell:
-        "workflow/scripts/evaluate_tuned_df.py {input} > {output} 2> {log}"
+        "workflow/scripts/evaluate_tuned_df.py --hyperparams {wildcards.hyperparams}"
+        " {input} > {output} 2> {log}"
 
 
 rule extract_features__kfp:

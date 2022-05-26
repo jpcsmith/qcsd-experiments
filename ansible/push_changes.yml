@@ -2,7 +2,7 @@
 - name: Push changed experiment files from the localhost to the remote.
   hosts:
     - wg_clients
-    - ml_host
+    - ml_hosts
     - zapdos
   gather_facts: false
   tasks:

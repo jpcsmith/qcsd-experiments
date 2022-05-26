@@ -51,6 +51,22 @@ experiment:
       packet_multiple: 300
       packet_size: 750
 
+    hyperparams: &hyperparams-default
+      # Defaults for hyperparameters to be used with the deep learning
+      # classifiers for each defence
+      front:
+        varcnn-time: tune
+        varcnn-sizes: tune
+        dfnet: tune
+      tamaraw:
+        varcnn-time: tune
+        varcnn-sizes: tune
+        dfnet: tune
+      undefended:
+        varcnn-time: "n_packets=5000"
+        varcnn-sizes: "n_packets=5000"
+        dfnet: "n_packets=5000"
+
   shaping_eval:
     n_samples: &ovh_samples 500
     scores:
@@ -69,22 +85,14 @@ experiment:
     min_pkt_size: 150
     splits: {n_folds: 5, seed: 438, validation_size: 0.1}
     classifiers: ["kfp", "dfnet", "varcnn"]
-    front: *front-default
-    tamaraw:
+    front: &front-conn
+      <<: *front-default
+    tamaraw: &tamaraw-conn
       <<: *tamaraw-default
       packet_size: 1200
       msd_limit_excess: 1500
 
-    hyperparams:
-      front:
-        varcnn-time: "tune"
-        varcnn-sizes: "tune"
-      tamaraw:
-        varcnn-time: "learning_rate=0.001,lr_decay=0.45,n_packets=7500"
-        varcnn-sizes: "learning_rate=0.01,lr_decay=0.45,n_packets=10000"
-      undefended:
-        varcnn-time: "n_packets=5000"
-        varcnn-sizes: "n_packets=5000"
+    hyperparams: *hyperparams-default
 
   ml_eval_mconn:
     dataset:
@@ -95,12 +103,19 @@ experiment:
     classifiers: ["kfp", "dfnet", "varcnn"]
     front: &mconn-front
       <<: *front-default
+      max_client_packets: 1300
+      max_server_packets: 1300
       use_empty_resources: true
+      packet_size: 1250
+      max_udp_payload_size: 1272
     tamaraw: &mconn-tamaraw
       <<: *tamaraw-default
-      packet_size: 1200
-      msd_limit_excess: 1500
+      packet_size: 1250
+      max_udp_payload_size: 1272
       use_empty_resources: true
+      msd_limit_excess: 1500
+
+    hyperparams: *hyperparams-default
 
   overhead_eval_mconn:
     n_samples: *ovh_samples
@@ -116,6 +131,8 @@ experiment:
     splits: {n_folds: 5, seed: 438, validation_size: 0.1}
     classifiers: ["kfp", "dfnet", "varcnn"]
     front: *front-default
+
+    hyperparams: *hyperparams-default
 
   improved_tamaraw:
     dataset:
