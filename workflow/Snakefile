@@ -25,8 +25,5 @@ include: "rules/demo.smk"
 include: "rules/webpage-graphs-mconn.smk"
 include: "rules/ml-eval-mconn.smk"
 include: "rules/overhead-eval-mconn.smk"
-include: "rules/improved-tamaraw.smk"
 
-include: "rules/tamaraw-debug.smk"
-
-# include: "rules/debug.smk"
+include: "rules/debug.smk"

@@ -130,7 +130,14 @@ experiment:
     min_pkt_size: 150
     splits: {n_folds: 5, seed: 438, validation_size: 0.1}
     classifiers: ["kfp", "dfnet", "varcnn"]
-    front: *front-default
+    front:
+      <<: *front-default
+      max_client_packets: 1300
+      max_server_packets: 1300
+      packet_size: 1250
+      max_udp_payload_size: 1272
+      peak_minimum: 0.2
+      peak_maximum: 3
 
     hyperparams: *hyperparams-default
 

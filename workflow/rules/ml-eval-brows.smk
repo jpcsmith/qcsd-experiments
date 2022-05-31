@@ -10,11 +10,11 @@ def ml_eval_brows__plot__inputs(wildcards, flatten: bool = False):
     defence = wildcards["defence"]
     base = "results/ml-eval-brows"
     result = {
-            # "$k$-FP": {
-            #     "QCSD": f"{base}/defence~{defence}/classifier~kfp/predictions.csv",
-            #     "Simulated": f"{base}/defence~simulated-{defence}/classifier~kfp/predictions.csv",
-            #     "Undef.": f"{base}/defence~undefended/classifier~kfp/predictions.csv",
-            # },
+        "$k$-FP": {
+            "QCSD": f"{base}/defence~{defence}/classifier~kfp/predictions.csv",
+            "Simulated": f"{base}/defence~simulated-{defence}/classifier~kfp/predictions.csv",
+            "Undef.": f"{base}/defence~undefended/classifier~kfp/predictions.csv",
+        },
         "DF": {
             "QCSD": f"{base}/defence~{defence}/classifier~dfnet/hyperparams~tune/predictions.csv",
             "Simulated": f"{base}/defence~simulated-{defence}/classifier~dfnet/hyperparams~tune/predictions.csv",

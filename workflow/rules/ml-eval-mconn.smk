@@ -30,6 +30,9 @@ def ml_eval_mconn__plot__inputs(wildcards, flatten: bool = False):
         }
     }
 
+    if defence == "tamaraw":
+        del result["$k$-FP"]["Simulated"], result["DF"]["Simulated"], result["Var-CNN"]["Simulated"]
+
     if flatten:
         result = [v for values in result.values() for v in values.values()]
     return result

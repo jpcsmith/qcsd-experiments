@@ -28,6 +28,12 @@ def extract_features(infile: Path):
         times = np.asarray(h5in["timestamps"], dtype=object)
         labels = np.asarray(h5in["labels"]["class"])
 
+    for i in range(len(times)):
+        idx = np.argsort(times[i])
+        sizes[i] = sizes[i][idx]
+        times[i] = times[i][idx]
+        assert times[i][0] == 0, "first should be zero"
+
     # Extract time and size related features
     features = kfingerprinting.extract_features_sequence(
         sizes=sizes, timestamps=times, n_jobs=None
