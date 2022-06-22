@@ -82,11 +82,11 @@ snakemake --configfile=<filename> <rulename>
 Where `<filename>` can be [config/test.yaml](config/test.yaml) or [config/final.yaml](config/final.yaml) and `<rulename>` is the name of one of the snakemake rules found in [workflow/rules/](workflow/rules/) or the target filename.
 The table below details the figures and tables in the paper and the rule used to produce them. The listed output files can be found in the results directory.
 
-| Section | Figure | Rule name | Output file |
+| Section | Figure | Rule name | Output files |
 |--- |--- |--- |---
-| 5. Shaping Case Studies: FRONT & Tamaraw | Figure 3 | `shaping_eval__all` |  `plots/shaping-eval-front.png`, `plots/shaping-eval-tamaraw.png`
-| | Table 2 | `overhead_eval__table` | `tables/overhead-eval.tex`
-| 6. Defending against WF Attacks at the Client | Figure 4
+| 5. Shaping Case Studies: FRONT & Tamaraw | Figure 3 | `shaping_eval__all` |  `plots/shaping-eval-front.png`, `plots/shaping-eval-tamaraw.png`
+| | Table 2 | `overhead_eval__table` | `tables/overhead-eval.tex`
+| 6. Defending against WF Attacks at the Client | Figure 4
 
 
 ### Section 5 Shaping Case Studies: FRONT & Tamaraw

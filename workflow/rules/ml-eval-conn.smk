@@ -2,7 +2,7 @@ ml_ec_config = config["experiment"]["ml_eval_conn"]
 rule ml_eval_conn__all:
     """Create all the plots for the single-connection evaluations (static rule)."""
     input:
-        # "results/plots/ml-eval-conn-tamaraw.png",
+        "results/plots/ml-eval-conn-tamaraw.png",
         "results/plots/ml-eval-conn-front.png",
 
 
