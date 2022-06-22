@@ -7,6 +7,7 @@
         src: files/experiment-dir/
         dest: "{{ exp_path }}"
         copy_links: true
+      when: copy_experiment | default(true)
 
     - name: Define the folder into which to clone the repo
       ansible.builtin.set_fact:
