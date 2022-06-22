@@ -42,15 +42,12 @@
       # -exec cp {} third-party/lib/ \;`
       ansible.builtin.find:
         path: "{{ third_party_dir }}/neqo-qcsd/target/release/"
-        pattern:
-          - "libnspr4.so"
-          - "libnss3.so"
+        pattern: "libnss3.so"
         recurse: true
       register: shared_libs
 
-    - name: Copy the shared libraries ot the third-party/lib/ directory
-      ansible.builtin.copy:
-        src: "{{ item }}"
-        dest: "{{ third_party_dir }}/lib/"
-        remote_src: true
-      loop: "{{ shared_libs.files | map(attribute='path') }}"
+    - name: Link to the directory containing the shared library files
+      ansible.builtin.file:
+        src: "{{ shared_libs.files[0].path | dirname }}"
+        dest: "{{ third_party_dir }}/lib"
+        state: link
