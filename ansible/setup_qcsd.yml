@@ -1,0 +1,56 @@
+---
+- name: Compile the Neqo QCSD library and client
+  hosts: wg_clients
+  tasks:
+    - name: Copy the experiment
+      ansible.posix.synchronize:
+        src: files/experiment-dir/
+        dest: "{{ exp_path }}"
+        copy_links: true
+
+    - name: Define the folder into which to clone the repo
+      ansible.builtin.set_fact:
+        third_party_dir: "{{ exp_path }}/third-party"
+
+    - name: Ensure {{ third_party_dir }} directories exist
+      file:
+        path: "{{ item }}"
+        state: directory
+      loop:
+        - "{{ third_party_dir }}"
+        - "{{ third_party_dir }}/bin"
+        - "{{ third_party_dir }}/lib"
+
+    - name: Clone the neqo-qcsd repository
+      ansible.builtin.git:
+        repo: https://github.com/jpcsmith/neqo-qcsd.git
+        dest: "{{ third_party_dir }}/neqo-qcsd"
+
+    - name: Build and install the {{ item }} binaries
+      ansible.builtin.command:
+        chdir: "{{ third_party_dir }}"
+        cmd: cargo install --path "neqo-qcsd/{{ item }}" --root "./" --locked
+      loop:
+        - neqo-client
+        - neqo-client-mp
+
+    - name: Find the shared libraries
+      # Equivalent to `find third-party/neqo-qcsd/target/release/
+      # \( -wholename '*/Release/lib/libnspr4.so'
+      # -o -wholename '*/Release/lib/libnss3.so' \)
+      # -exec cp {} third-party/lib/ \;`
+      ansible.builtin.find:
+        path: "{{ third_party_dir }}/neqo-qcsd/target/release/"
+        use_regex: true
+        pattern:
+          - ".*/Release/lib/libnspr4.so"
+          - ".*/Release/lib/libnss3.so"
+        recurse: true
+      register: shared_libs
+
+    - name: copy files to tmp
+      ansible.builtin.copy:
+        src: "{{ item.path }}"
+        dest: "{{ third_party_dir }}/lib/"
+        remote_src: true
+      loop: "{{ shared_libs.files }}"

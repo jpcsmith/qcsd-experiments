@@ -4,9 +4,9 @@ new_york    ansible_user=root ansible_host=<ssh_ip_or_hostname>
 bengaluru   ansible_user=root ansible_host=<ssh_ip_or_hostname>
 
 [wg_gateways]
-frankfurt   region_id=0 host_ip=<public_ip>
-new_york    region_id=1 host_ip=<public_ip>
-bengaluru   region_id=2 host_ip=<public_ip>
+frankfurt   region_id=0 gateway_ip=<public_ip>
+new_york    region_id=1 gateway_ip=<public_ip>
+bengaluru   region_id=2 gateway_ip=<public_ip>
 
 [wg_gateways:vars]
 n_clients_per_gateway=12

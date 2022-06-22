@@ -1,6 +1,0 @@
----
-- name: Copy the experiment
-  ansible.posix.synchronize:
-    src: files/experiment-dir/
-    dest: "{{ exp_path }}"
-    copy_links: true

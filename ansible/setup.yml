@@ -1,0 +1,4 @@
+---
+- import_playbook: setup_qcsd.yml
+- import_playbook: setup_chromium.yml
+- import_playbook: setup_wireguard.yml
