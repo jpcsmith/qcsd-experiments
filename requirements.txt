@@ -1,7 +1,6 @@
 snakemake==6.0.5
 aiodns==2.0.0
 aiohttp==3.7.3
-# numpy==1.20.2
 pandas==1.2.4
 docopt==0.6.2
 schema==0.7.2
@@ -14,13 +13,5 @@ jupyterlab==3.0.15
 tensorflow==2.5.0
 ansible==4.1.0
 docker==5.0.0
-tensorflow-addons==0.15
-
-# git+https://github.com/jpcsmith/wf-tools.git@develop#egg=lab
-
-# Development files
-wheel
-
-# Snakemake reports
-# jinja2
-# pygraphviz
+pandas==1.2.4
+git+https://github.com/jpcsmith/wf-tools.git@v0.4.0#egg=lab
