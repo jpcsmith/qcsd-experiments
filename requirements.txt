@@ -14,4 +14,5 @@ tensorflow==2.5.0
 ansible==4.1.0
 docker==5.0.0
 pandas==1.2.4
+tslearn==0.5.1
 git+https://github.com/jpcsmith/wf-tools.git@v0.4.0#egg=lab
