@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+#? Usage: test-vpn <region_id> <client_id>
+#?
+#? Test connectivity of the Wireguard VPN that is running in the 
+#? wg-client-<region_id>-<client_id> container.
+set -e
+
+readonly REGION_ID=${1?"region_id required"}
+readonly CLIENT_ID=${2?"client_id required"}
+shift 2
+
+readonly NETWORK_IMAGE="wg-client-${REGION_ID}-${CLIENT_ID}"
+
+DOCKER_RUN_ARGS=()
+# Disable the log driver so that if the output is streamed, it doesnt saturate
+# docker's logs
+DOCKER_RUN_ARGS+=(-i --init --rm --log-driver none)
+# Use the network of the Wireguard client through which we want to connect
+DOCKER_RUN_ARGS+=("--network=container:${NETWORK_IMAGE}")
+# Use the current user and group
+DOCKER_RUN_ARGS+=(--user $(id -u):$(id -g))
+# Mimic the script location outside of the container and mount the results 
+# directory to allow for easy in/output
+DOCKER_RUN_ARGS+=(--workdir "$PWD" --volume "$PWD:$PWD:rw")
+# Constrain the CPU and memory usage to allow for parallel invocations
+DOCKER_RUN_ARGS+=(--memory "1.5g" --memory-reservation 1g --cpus 2)
+
+exec docker run "${DOCKER_RUN_ARGS[@]}" --entrypoint wget wg-client -q --spider http://google.com

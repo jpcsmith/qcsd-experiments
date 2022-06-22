@@ -48,7 +48,7 @@ RUN apt-get -qq update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /tmp
-RUN pip install -r /tmp/requirements.txt
+RUN pip install importlib-metadata -r /tmp/requirements.txt
 
 COPY fetch-script /usr/local/bin/
 

@@ -7,10 +7,12 @@
   tasks:
     - name: Install aptitude using apt
       apt: name=aptitude state=latest update_cache=yes force_apt_get=yes
+      become: yes
 
     - name: Install required system packages
       apt: name={{ item }} state=latest update_cache=yes
       loop: ['wireguard']
+      become: yes
 
     - name: Generate the configuration
       ansible.builtin.template:
@@ -19,23 +21,27 @@
         mode: '0644'
       notify:
         - Restart Wireguard
+      become: yes
 
     - name: Allow IP forwarding
       ansible.posix.sysctl:
         name: net.ipv4.ip_forward
         value: '1'
         sysctl_set: true
+      become: yes
 
     - name: Start the Wireguard gateway
       ansible.builtin.shell: wg show wg0 || wg-quick up wg0
       register: wg_start
       changed_when: '"interface: wg0" not in wg_start.stdout'
+      become: yes
 
   handlers:
     - name: Restart Wireguard
       ansible.builtin.shell: >
         if wg show wg0; then wg-quick down wg0 && wg-quick up wg0;
         else wg-quick up wg0; fi
+      become: yes
 
 
 - name: Setup Wireguard clients
@@ -66,7 +72,8 @@
           'client_id': item.1,
           'tag': item.0 ~ '-' ~ item.1
         }] }}"
-      loop: "{{ range(n_gateways) | product(range(n_clients_per_gateway)) }}"
+      loop: >
+        {{ range(groups['wg_gateways']|length) | product(range(n_clients_per_gateway)) }}
 
     - name: Generate the configuration
       ansible.builtin.template:
@@ -100,8 +107,7 @@
     - name: Check Wireguard client connectivity
       tags: wg-test
       shell:
-        cmd: "source {{exp_path}}/activate
-          && NCV_TEST=1 {{ exp_path }}/workflow/scripts/neqo-client-vpn
-          {{item.region_id}} {{item.client_id}}"
-        executable: /usr/bin/bash
+        cmd: >
+          {{exp_path}}/workflow/scripts/test-vpn {{item.region_id}} {{item.client_id}}
+        executable: bash
       loop: "{{ client_list | flatten(levels=1) }}"

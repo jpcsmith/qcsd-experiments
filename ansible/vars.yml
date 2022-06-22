@@ -1,7 +1,4 @@
 ---
-n_gateways: 3
-n_clients_per_gateway: 12
-
 # Wireguard client and gateway keys.
 #
 # Client keys are indexed by region_id then client_id, whereas gateway
