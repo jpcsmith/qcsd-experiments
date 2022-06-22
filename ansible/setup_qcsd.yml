@@ -20,7 +20,6 @@
       loop:
         - "{{ third_party_dir }}"
         - "{{ third_party_dir }}/bin"
-        - "{{ third_party_dir }}/lib"
 
     - name: Clone the neqo-qcsd repository
       ansible.builtin.git:
