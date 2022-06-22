@@ -1,0 +1,13 @@
+#: Set-up the environment
+#:
+#: This file must be used with "source env_vars" *from bash* you
+#: cannot run it directly
+
+#: The directory containing this source file, from which everything is relative
+DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+DIR="$(realpath "${DIR}")"
+
+# Release paths
+export NEQO_BIN="${DIR}/third-party/bin/neqo-client"
+export NEQO_BIN_MP="${DIR}/third-party/bin/neqo-client-mp"
+export NEQO_LD_PATH="${DIR}/third-party/lib"

@@ -33,7 +33,7 @@ DOCKER_RUN_ARGS+=(-i --init --rm --log-driver none)
 DOCKER_RUN_ARGS+=("--network=container:${NETWORK_IMAGE}")
 # Use the current user and group
 DOCKER_RUN_ARGS+=(--user $(id -u):$(id -g))
-# Mimic the script location outside of the container and mount the results 
+# Mimic the script location outside of the container and mount the results
 # directory to allow for easy in/output
 DOCKER_RUN_ARGS+=(--workdir "$PWD" --volume "$PWD:$PWD:rw")
 # Mount the NEQO library path and the shared object path
@@ -44,9 +44,7 @@ DOCKER_RUN_ARGS+=(--memory "1.5g" --memory-reservation 1g --cpus 2)
 # Forward the RUST_LOG and keylog environment variable
 DOCKER_RUN_ARGS+=(--env "RUST_LOG=${RUST_LOG}" --env "SSLKEYLOGFILE=${SSLKEYLOGFILE}")
 
-if [[ -n "${NCV_TEST}" ]]; then
-    exec docker run "${DOCKER_RUN_ARGS[@]}" --entrypoint wget wg-client -q --spider http://google.com
-elif [[ -n "${NCV_BASH}" ]]; then
+if [[ -n "${NCV_BASH}" ]]; then
     exec docker run "${DOCKER_RUN_ARGS[@]}" --entrypoint bash -t wg-client "$@"
 else
     exec docker run "${DOCKER_RUN_ARGS[@]}" --entrypoint neqo-client wg-client "$@"

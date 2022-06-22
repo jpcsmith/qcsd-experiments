@@ -1,9 +1,10 @@
 rule depfetch__input_batch:
-    """Create a single batch for the URL dependency fetches."""
-    input:
-        "results/version-scan/scan-results.filtered.csv"
+    """Split version scan results into batches for the URL dependency
+    fetches (pattern rule)."""
     output:
         "results/webpage-graphs/batches/batch-{i}.csv"
+    input:
+        "results/version-scan/scan-results.filtered.csv"
     params:
         start=lambda w: 1 + int(w["i"]) * config["webpage_graphs"]["batch_size"],
         batch_size=config["webpage_graphs"]["batch_size"]
@@ -13,11 +14,11 @@ rule depfetch__input_batch:
 
 
 rule depfetch__url_dependencies:
-    """Fetch the URL dependencies with the browser for a split of URLs."""
-    input:
-        rules.depfetch__input_batch.output,
+    """Fetch URL dependencies for a batch of domains with Chromium (pattern rule)."""
     output:
         protected("results/webpage-graphs/browser-logs/batch-{i}.json.gz")
+    input:
+        rules.depfetch__input_batch.output,
     log:
         "results/webpage-graphs/browser-logs/batch-{i}.log"
     threads: 2
@@ -29,12 +30,14 @@ rule depfetch__url_dependencies:
 
 
 rule depfetch__webpage_graphs:
-    """Extract the dependency graph from the browser results."""
-    input:
-        expand(rules.depfetch__url_dependencies.output,
-               i=range(config["webpage_graphs"]["n_batches"]))
+    """Extract the dependency graph from the browser results (static rule)."""
     output:
         directory("results/webpage-graphs/graphs")
+    input:
+        expand(
+            rules.depfetch__url_dependencies.output,
+           i=range(config["webpage_graphs"]["n_batches"])
+        )
     log:
         "results/webpage-graphs/graphs.log"
     shell:

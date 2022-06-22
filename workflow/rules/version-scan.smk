@@ -1,9 +1,9 @@
 rule quic_version_scan:
-    """Scan the an Alexa domain list for QUIC support."""
-    input:
-        config["alexa_list"]
+    """Scan the an Alexa domain list for QUIC support (static rule)."""
     output:
         protected("results/version-scan/scan-results.csv")
+    input:
+        config["alexa_list"]
     log:
         "results/version-scan/scan-results.log"
     script:
@@ -11,18 +11,14 @@ rule quic_version_scan:
 
 
 rule quic_version_scan__filtered:
-    """Filter QUIC scan to domains supporting the QUIC versions
-    specified in the config, while accounting for similar domains."""
-    input:
-        rules.quic_version_scan.output
+    """Filter QUIC scan to domains supporting the QUIC versions specified
+    in the config, while accounting for similar domains (static rule)."""
     output:
         "results/version-scan/scan-results.filtered.csv",
-        report("results/plots/frequent-prefixes.png",
-               caption="../report/frequent-prefixes.rst",
-               category="QUIC Scan"),
-        report("results/plots/frequent-slds.png",
-               caption="../report/frequent-slds.rst",
-               category="QUIC Scan"),
+        "results/plots/frequent-prefixes.png",
+        "results/plots/frequent-slds.png",
+    input:
+        rules.quic_version_scan.output
     log:
         "results/version-scan/scan-results.filtered.log"
     params:

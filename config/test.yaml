@@ -1,6 +1,6 @@
 ---
 # The Alexa top list, http://s3.amazonaws.com/alexa-static/top-1m.csv.zip
-alexa_list: resources/alexa-top100000-2021-07-18.csv.gz
+alexa_list: resources/alexa-top10000-2021-07-18.csv.gz
 
 # Versions of QUIC supported in our experiments
 quic_versions: ["h3-29"]
@@ -13,7 +13,7 @@ webpage_graphs:
   # The number of dependency graphs collected in each batch
   batch_size: 100
   # Collect n_batches * batch_size web-page graphs
-  n_batches: 190
+  n_batches: 5
 
 # The log level passed to RUST_LOG for the neqo-client
 neqo_log_level: "neqo-transport=info"
@@ -26,13 +26,12 @@ user_agent: >-
 # Wireguard clients and thier ports assignments, which are used to filter
 # the packet captures
 wireguard:
-  n_regions: 3
-  n_clients_per_region: 12
+  n_regions: 1
+  n_clients_per_region: 6
   client_ports:
-    - [51501, 51502, 51503, 51504, 51505, 51506, 51507, 51508, 51509, 51510, 51511, 51512]
-    - [51601, 51602, 51603, 51604, 51605, 51606, 51607, 51608, 51609, 51610, 51611, 51612]
-    - [51701, 51702, 51703, 51704, 51705, 51706, 51707, 51708, 51709, 51710, 51711, 51712]
+    - [51501, 51502, 51503, 51504, 51505, 51506]
   interface: "docker0"
+
 
 # Experiment configurations
 experiment:
@@ -69,22 +68,24 @@ experiment:
   # Configuration for checking how well the shaping was performed.
   # Associated rules are found in `workflow/rules/shaping-eval.smk`.
   shaping_eval:
-    n_samples: &ovh_samples 500
+    n_samples: &ovh_samples 50
     scores:
       ts_offset: {min: 0, max: 200, inc: 5}
       resample_rates: ["1ms", "5ms", "25ms", "50ms"]
       lcss_eps: {"front": 150, "tamaraw": 250}
-      min_pkt_size: [0]
+      # min_pkt_size: [0]
     front: *front-default
     tamaraw: *tamaraw-default
 
+  # Configuration for the ML evaluation in the single-connection setting.
+  # Associated rules are found in `workflow/rules/ml-eval-conn.smk`.
   ml_eval_conn:
     dataset:
-      n_monitored: 100
-      n_instances: 100
-      n_unmonitored: 10_000
-    min_pkt_size: 150
-    splits: {n_folds: 5, seed: 438, validation_size: 0.1}
+      n_monitored: 10
+      n_instances: 10
+      n_unmonitored: 100
+    # min_pkt_size: 150
+    # splits: {n_folds: 5, seed: 438, validation_size: 0.1}
     classifiers: ["kfp", "dfnet", "varcnn"]
     front: &front-conn
       <<: *front-default
