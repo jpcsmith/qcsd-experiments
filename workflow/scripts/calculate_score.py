@@ -11,7 +11,7 @@ from typing import Sequence, Dict, Optional
 import numpy as np
 import pandas as pd
 import tslearn.metrics
-from scipy.stats import pearsonr, spearmanr
+from scipy.stats import pearsonr
 from scipy.spatial.distance import euclidean
 
 import common
@@ -107,6 +107,15 @@ def _calculate_score(
         _LOGGER.debug("Series length at rate %s: %d", rate, len(series))
         _LOGGER.debug("Series summary at rate %s: %s", rate, series.describe())
 
+        if len(series["a"]) > 30_000:
+            _LOGGER.warning(
+                "Refusing to allocate >= 8 GB for sample: %s, %s, %s",
+                dir_,
+                rate,
+                direction,
+            )
+            continue
+
         results.append(
             {
                 "sample": str(dir_),  # Sample name
@@ -114,17 +123,10 @@ def _calculate_score(
                 "dir": direction,
                 "min_pkt_size": min_pkt_size,
                 "pearsonr": pearsonr(series["a"], series["b"])[0],
-                "spearmanr": spearmanr(series["a"], series["b"])[0],
                 "lcss": tslearn.metrics.lcss(series["a"], series["b"], eps=lcss_eps),
-                "euclidean": _scaled(euclidean, series["b"], series["a"], series["c"]),
             }
         )
     return results
-
-
-def _scaled(metric_fn, series_a, series_b, series_c) -> float:
-    reference_point = metric_fn(series_a, series_c)
-    return (reference_point - metric_fn(series_a, series_b)) / reference_point
 
 
 def _filter(column, below):
