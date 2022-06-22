@@ -26,7 +26,7 @@
         repo: https://github.com/jpcsmith/neqo-qcsd.git
         dest: "{{ third_party_dir }}/neqo-qcsd"
 
-    - name: Build and install the {{ item }} binaries
+    - name: Build and install the QCSD binaries
       ansible.builtin.command:
         chdir: "{{ third_party_dir }}"
         cmd: cargo install --path "neqo-qcsd/{{ item }}" --root "./" --locked
@@ -41,16 +41,15 @@
       # -exec cp {} third-party/lib/ \;`
       ansible.builtin.find:
         path: "{{ third_party_dir }}/neqo-qcsd/target/release/"
-        use_regex: true
         pattern:
-          - ".*/Release/lib/libnspr4.so"
-          - ".*/Release/lib/libnss3.so"
+          - "libnspr4.so"
+          - "libnss3.so"
         recurse: true
       register: shared_libs
 
-    - name: copy files to tmp
+    - name: Copy the shared libraries ot the third-party/lib/ directory
       ansible.builtin.copy:
-        src: "{{ item.path }}"
+        src: "{{ item }}"
         dest: "{{ third_party_dir }}/lib/"
         remote_src: true
-      loop: "{{ shared_libs.files }}"
+      loop: "{{ shared_libs.files | map(attribute='path') }}"
