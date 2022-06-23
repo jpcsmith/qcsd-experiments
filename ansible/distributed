@@ -2,6 +2,7 @@ localhost   ansible_connection=local ansible_python_interpreter="{{ ansible_play
 frankfurt   ansible_user=root ansible_host=<ssh_ip_or_hostname>
 new_york    ansible_user=root ansible_host=<ssh_ip_or_hostname>
 bengaluru   ansible_user=root ansible_host=<ssh_ip_or_hostname>
+client_runner   ansible_host=<ssh_ip_or_hostname> exp_path=<path_to_copy_experiment_files>
 
 [wg_gateways]
 frankfurt   region_id=0 gateway_ip=<public_ip>
@@ -12,19 +13,4 @@ bengaluru   region_id=2 gateway_ip=<public_ip>
 n_clients_per_gateway=12
 
 [wg_clients]
-zapdos  ansible_host=<ssh_ip_or_hostname> exp_path=<path_to_copy_experiment_files>
-
-
-
-
-[clients]
-qcsd-wg-client-1  ansible_host=164.92.225.7  ansible_user=root
-
-[other]
-charizard  ansible_host=netsec-hpc-charizard.inf.ethz.ch exp_path=/home/jsmith/qcd-final
-
-# ml_host ansible_host=euler.ethz.ch exp_path=/cluster/scratch/jsmith/qcd-experiments
-[ml_hosts]
-home-wan ansible_host=home-wan exp_path=/home/jsmith/qcd-final
-aws      exp_path=/home/ubuntu/qcd-final
-
+client_runner
