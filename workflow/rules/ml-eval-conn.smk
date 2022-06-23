@@ -1,4 +1,6 @@
 ml_ec_config = config["experiment"]["ml_eval_conn"]
+
+
 rule ml_eval_conn__all:
     """Create all the plots for the single-connection evaluations (static rule)."""
     input:
@@ -67,13 +69,13 @@ def ml_eval_conn__combine_varcnn__inputs(wildcards):
 
 
 rule ml_eval_conn__combine_varcnn:
+    """Combine VarCNN time and sizes predictions (pattern rule)."""
     output:
         "results/ml-eval-conn/{path}/classifier~varcnn/predictions.csv"
     input:
         unpack(ml_eval_conn__combine_varcnn__inputs)
     run:
         combine_varcnn_predictions(input, output)
-
 
 
 rule ml_eval_conn__simulated_dataset:

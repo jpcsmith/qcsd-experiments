@@ -1,4 +1,7 @@
 ---
+# Path to this configfile
+configpath: config/test.yaml
+
 # The Alexa top list, http://s3.amazonaws.com/alexa-static/top-1m.csv.zip
 alexa_list: resources/alexa-top10000-2021-07-18.csv.gz
 
@@ -84,8 +87,6 @@ experiment:
       n_monitored: 10
       n_instances: 10
       n_unmonitored: 50
-    # min_pkt_size: 150
-    # splits: {n_folds: 5, seed: 438, validation_size: 0.1}
     classifiers: ["kfp", "dfnet", "varcnn"]
     front: &front-conn
       <<: *front-default
@@ -93,15 +94,15 @@ experiment:
       <<: *tamaraw-default
       packet_size: 1200
       msd_limit_excess: 1500
-
     hyperparams: *hyperparams-default
 
+  # Configuration for the ML evaluation in the multi-connection setting.
+  # Associated rules are found in `workflow/rules/ml-eval-mconn.smk`.
   ml_eval_mconn:
     dataset:
-      n_monitored: 100
-      n_instances: 100
-      n_unmonitored: 1000
-    splits: {n_folds: 5, seed: 439, validation_size: 0.1}
+      n_monitored: 10
+      n_instances: 10
+      n_unmonitored: 50
     classifiers: ["kfp", "dfnet", "varcnn"]
     front: &mconn-front
       <<: *front-default
@@ -116,21 +117,15 @@ experiment:
       max_udp_payload_size: 1272
       use_empty_resources: true
       msd_limit_excess: 1500
-
     hyperparams: *hyperparams-default
 
-  overhead_eval_mconn:
-    n_samples: *ovh_samples
-    front: *mconn-front
-    tamaraw: *mconn-tamaraw
-
+  # Configuration for the ML evaluation in the browser setting.
+  # Associated rules are found in `workflow/rules/ml-eval-brows.smk`.
   ml_eval_brows:
     dataset:
-      n_monitored: 100
-      n_instances: 100
-      n_unmonitored: 10_000
-    min_pkt_size: 150
-    splits: {n_folds: 5, seed: 438, validation_size: 0.1}
+      n_monitored: 10
+      n_instances: 10
+      n_unmonitored: 50
     classifiers: ["kfp", "dfnet", "varcnn"]
     front:
       <<: *front-default
@@ -140,15 +135,11 @@ experiment:
       max_udp_payload_size: 1272
       peak_minimum: 0.2
       peak_maximum: 3
-
     hyperparams: *hyperparams-default
 
-  improved_tamaraw:
-    dataset:
-      n_monitored: 100
-      n_instances: 100
-      n_unmonitored: 8000
-    tamaraw:
-      <<: *tamaraw-default
-      packet_size: 1250
-      max_udp_payload_size: 1272
+  # Configuration for the multi-connection overhead evaluation
+  # Associated rules are found in `workflow/rules/overhead-eval-mconn.smk`.
+  overhead_eval_mconn:
+    n_samples: *ovh_samples
+    front: *mconn-front
+    tamaraw: *mconn-tamaraw

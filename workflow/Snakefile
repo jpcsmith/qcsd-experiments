@@ -3,7 +3,7 @@ import sys
 sys.path.append("workflow/scripts/")
 
 
-# configfile: "config/config.yaml"
+# configfile: "config/final.yaml"
 
 
 wildcard_constraints:
@@ -19,13 +19,9 @@ include: "rules/webpage-graphs.smk"
 include: "rules/shaping-eval.smk"
 include: "rules/overhead-eval.smk"
 include: "rules/ml-eval-conn.smk"
+include: "rules/ml-eval-mconn.smk"
+include: "rules/webpage-graphs-mconn.smk"
+include: "rules/overhead-eval-mconn.smk"
+include: "rules/ml-eval-brows.smk"
 
-
-# include: "rules/schedules.smk"
-# include: "rules/ml-eval-brows.smk"
 # include: "rules/demo.smk"
-# include: "rules/webpage-graphs-mconn.smk"
-# include: "rules/ml-eval-mconn.smk"
-# include: "rules/overhead-eval-mconn.smk"
-
-# include: "rules/debug.smk"

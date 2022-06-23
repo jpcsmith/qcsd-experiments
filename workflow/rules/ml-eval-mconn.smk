@@ -91,6 +91,7 @@ def ml_eval_mconn__combine_varcnn__inputs(wildcards):
 
 
 rule ml_eval_mconn__combine_varcnn:
+    """Combine VarCNN time and size predictions (pattern rule)."""
     output:
         "results/ml-eval-mconn/{path}/classifier~varcnn/predictions.csv"
     input:
@@ -130,7 +131,7 @@ rule ml_eval_mconn__collect:
         n_unmonitored=ml_emc_config["dataset"]["n_unmonitored"],
         timeout=120,
         max_failures=3,
-        configfile=workflow.configfiles[0],
+        configfile=config["configpath"],
     shell:
         "workflow/scripts/run_collectionv2.py --configfile {params.configfile}"
         " --n-monitored {params.n_monitored} --n-instances {params.n_instances}"

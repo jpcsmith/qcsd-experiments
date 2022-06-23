@@ -15,7 +15,7 @@ rule overhead_eval__calculate:
         tamaraw_config=json.dumps(config["experiment"]["shaping_eval"]["tamaraw"])
     shell:
       "workflow/scripts/calculate_overhead.py --tamaraw-config '{params.tamaraw_config}'"
-      " {wildcards.defence} {input} > {output} 2> {log}"
+      " --n-jobs {threads} {wildcards.defence} {input} > {output} 2> {log}"
 
 
 rule overhead_eval__table:

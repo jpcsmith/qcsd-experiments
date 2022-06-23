@@ -2,6 +2,7 @@ ml_eb_config = config["experiment"]["ml_eval_brows"]
 
 
 rule ml_eval_brows__all:
+    """Generate the FRONT plot in the browser setting."""
     input:
         "results/plots/ml-eval-brows-front.png"
 
@@ -49,6 +50,7 @@ def ml_eval_brows__combine_varcnn__inputs(wildcards):
 
 
 rule ml_eval_brows__combine_varcnn:
+    """Combine VarCNN time and sizes predictions in the browser setting (pattern rule)."""
     output:
         "results/ml-eval-brows/{path}/classifier~varcnn/predictions.csv"
     input:

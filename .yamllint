@@ -1,5 +1,8 @@
+---
 extends: default
 
 rules:
+  truthy:
+    check-keys: true
   line-length:
     max: 90

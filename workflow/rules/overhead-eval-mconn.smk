@@ -1,6 +1,8 @@
 ohead_mconn_config = config["experiment"]["overhead_eval_mconn"]
 
+
 rule overhead_eval_mconn__table:
+    """Generate the table for the multiconnection overhead evaluation (static rule)."""
     input:
         front="results/overhead-eval-mconn/front.csv",
         tamaraw="results/overhead-eval-mconn/tamaraw.csv",
@@ -11,6 +13,7 @@ rule overhead_eval_mconn__table:
 
 
 rule overhead_eval_mconn__calculate:
+    """Calculate overheads in the multiconnection setting (pattern rule)."""
     input:
         "results/overhead-eval-mconn/{defence}/dataset/"
     output:
@@ -28,7 +31,7 @@ rule overhead_eval_mconn__calculate:
 
 
 rule overhead_eval_mconn__collect:
-    """Collect control and defended samples for a given defence."""
+    """Collect control and defended samples for a given defence (pattern rule)."""
     input:
         "results/webpage-graphs-mconn/graphs/"
     output:
