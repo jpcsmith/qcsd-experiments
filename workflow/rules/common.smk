@@ -135,14 +135,3 @@ rule extract_features__kfp:
     threads: 12
     shell:
         "workflow/scripts/extract_kfp_features.py {input} > {output} 2> {log}"
-
-
-rule simulate__padded_packets:
-    """Create a simulated dataset where incoming packet sizes are hidden."""
-    output:
-        "{path}/defence~padded-{defence}/strategy~{strategy}/direction~{direction}/dataset.h5"
-    input:
-        "{path}/defence~{defence}/dataset.h5"
-    shell:
-        "workflow/scripts/hide_sizes.py --direction {wildcards.direction}"
-        " {wildcards.strategy} {input} {output}"
