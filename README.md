@@ -21,7 +21,7 @@ This repository contains the experiment and evaluation code for the paper "QCSD:
 
 ```bash
 # Clone the repository
-git clone https://gitlab.inf.ethz.ch/jsmith/qcd-experiments.git
+git clone https://github.com/jpcsmith/qcsd-experiments.git
 # Change to the code directory
 cd qcd-experiments
 # Download resources/alexa-1m-2021-07-18.csv.gz
