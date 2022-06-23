@@ -78,6 +78,8 @@ experiment:
     front: *front-default
     tamaraw: *tamaraw-default
 
+  # Configuration for the ML evaluation in the single-connection setting.
+  # Associated rules are found in `workflow/rules/ml-eval-conn.smk`.
   ml_eval_conn:
     dataset:
       n_monitored: 100

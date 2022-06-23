@@ -83,7 +83,7 @@ experiment:
     dataset:
       n_monitored: 10
       n_instances: 10
-      n_unmonitored: 100
+      n_unmonitored: 50
     # min_pkt_size: 150
     # splits: {n_folds: 5, seed: 438, validation_size: 0.1}
     classifiers: ["kfp", "dfnet", "varcnn"]
