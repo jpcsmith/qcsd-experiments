@@ -1,9 +1,6 @@
-# README
+# QCSD: A QUIC Client-Side Website-Fingerprinting Defence Framework
 
-- **TODO**: Add a branch/tag to the neqo-qcsd repo
-- **TODO**: Change to public URL of the experiments repo and merge to main
-- **TODO**: Update the instructions to download the LFS file
-- **TODO**: Time estimates for the rules?
+This repository contains the experiment and evaluation code for the paper "QCSD: A QUIC Client-Side Website-Fingerprinting Defence Framework" (USENIX Security 2022). The Rust code for the QCSD library and test clients can be found at https://github.com/jpcsmith/neqo-qcsd.
 
 ## Software Requirements
 - *Ubuntu 20.04 with bash*: All code was tested on a fresh installation of Ubuntu 20.04.
@@ -64,6 +61,7 @@ Perform the following steps:
 
 ## Running Experiments
 
+Ensure that the environment is setup before running the experiments.
 ```bash
 # Activate the virtual environment if not already active
 source env/bin/activate
@@ -79,54 +77,22 @@ The results and plots in the paper were produced using snakemake. Like GNU make,
 snakemake --configfile=<filename> <rulename>
 ```
 
-Where `<filename>` can be [config/test.yaml](config/test.yaml) or [config/final.yaml](config/final.yaml) and `<rulename>` is the name of one of the snakemake rules found in [workflow/rules/](workflow/rules/) or the target filename.
-The table below details the figures and tables in the paper and the rule used to produce them. The listed output files can be found in the results directory.
+Where `<filename>` can be [config/test.yaml](config/test.yaml) or [config/final.yaml](config/final.yaml) and `<rulename>` is the name of one of the snakemake rules found in [workflow/rules/](workflow/rules/) or the target filename. The configfile can also be set in [workflow/Snakefile](workflow/Snakefile) to avoid repeatedly specifying it on the command line.
 
-| Section | Figure | Rule name | Output files |
+### Mapping of Figures to Snakemake Rules
+
+The table below details the figures and tables in the paper and the rule used to produce them. The listed output files can be found in the `results/` directory.
+
+| Section | Figure | Rule name | Output file |
 |--- |--- |--- |---
 | 5. Shaping Case Studies: FRONT & Tamaraw | Figure 3 | `shaping_eval__all` |  `plots/shaping-eval-front.png`, `plots/shaping-eval-tamaraw.png`
-| | Table 2 | `overhead_eval__table` | `tables/overhead-eval.tex`
-| 6. Defending against WF Attacks at the Client | Figure 4
+|  | Table 2 | `overhead_eval__table` | `tables/overhead-eval.tex`
+| 6.1. Defending Single Connections | Figure 4 | `ml_eval_conn__all` | `plots/ml-eval-conn-tamaraw.png`, `plots/ml-eval-conn-front.png`
+| 6.2. Defending Full Web-Page Loads | Figure 5 | `ml_eval_mconn__all` | `plots/ml-eval-mconn-tamaraw.png`, `plots/ml-eval-mconn-front.png`
+| | Figure 6 | `ml_eval_brows__all`| `plots/ml-eval-brows-front.png`
+| E. Overhead in the Multi-connection Setting | Table 3 |  `overhead_eval_mconn__table` | `tables/overhead-eval-mconn.tex`
+| F. Server Compliance with Shaping | Figure 8 | None. Instead see `workflow/notebooks/failure-analysis.ipynb` | `plots/failure-rate.png`|
 
+## Licence
 
-### Section 5 Shaping Case Studies: FRONT & Tamaraw
-
-```bash
-snakemake --configfile=config/test.yaml shaping_eval__all
-```
-
-will create the plots
-- results/plots/shaping-eval-front.png
-- results/plots/shaping-eval-tamaraw.png
-
-
-#### Create web-page graphs
-
-Run
-```bash
-snakemake --configfile=config/small.yaml depfetch__webpage_graphs -j
-```
-
-- Version scan (5 min)
-	- Scans for QUIC support in the alexa top-1m list
-- Webpage graphs (10 min)
-- Results are written to results/
-
-- Set the IP address in hosts-small
-
-cargo install .. --locked
-```bash
-cd third-party/
-git clone https://github.com/jpcsmith/neqo-qcsd.git
-cd neqo-qcsd
-cargo install --path neqo-client --root ../  --locked
-cargo install --path neqo-client-mp --root ../  --locked
-```
-
-
-```bash
-export NEQO_BIN="$PWD/third-party/bin/neqo-client"
-export NEQO_BIN_MP="$PWD/third-party/bin/neqo-client-mp"
-```
-
-`find third-party/neqo-qcsd/target/release/ \( -wholename '*/Release/lib/libnspr4.so' -o -wholename '*/Release/lib/libnss3.so' \) -exec cp {} third-party/lib/ \;`
+The code in this repository and associated data is released under an MIT licence as found in the LICENCE file.
