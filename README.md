@@ -21,9 +21,9 @@ This repository contains the experiment and evaluation code for the paper "QCSD:
 
 ```bash
 # Clone the repository
-git clone https://gitlab.inf.ethz.ch/jsmith/qcd-experiments.git
+git clone https://gitlab.inf.ethz.ch/jsmith/qcsd-experiments.git
 # Change to the code directory
-cd qcd-experiments
+cd qcsd-experiments
 # Download resources/alexa-1m-2021-07-18.csv.gz
 git lfs pull
 ```
@@ -74,7 +74,7 @@ source env_vars
 The results and plots in the paper were produced using snakemake. Like GNU make, snakemake will run all dependent rules necessary to build the final target. The general syntax is
 
 ```bash
-snakemake --configfile=<filename> <rulename>
+snakemake -j <cores> --configfile=<filename> <rulename>
 ```
 
 Where `<filename>` can be [config/test.yaml](config/test.yaml) or [config/final.yaml](config/final.yaml) and `<rulename>` is the name of one of the snakemake rules found in [workflow/rules/](workflow/rules/) or the target filename. The configfile can also be set in [workflow/Snakefile](workflow/Snakefile) to avoid repeatedly specifying it on the command line.
